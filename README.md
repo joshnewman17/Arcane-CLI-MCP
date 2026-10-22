@@ -10,7 +10,7 @@ Claude (claude.ai connector / Claude Code)
    │  MCP over Streamable HTTP (or stdio)
    ▼
 arcane-mcp container ── Python MCP server ── policy table ── subprocess (argv list, no shell)
-   │                                                         └─ arcane-cli v2.16.1
+   │                                                         └─ arcane-cli v2.17.0
    │  HTTP(S) + X-Api-Key
    ▼
 Arcane instance (LAN)
@@ -279,10 +279,15 @@ away in v3). To upgrade:
 1. Check the [release notes](https://github.com/getarcaneapp/arcane/releases).
 2. Bump `ARCANE_CLI_VERSION` in the `Dockerfile` and `docker-compose.yml`. Optionally set
    `ARCANE_CLI_SHA256` to the tarball's checksum.
-3. Dump the new command tree and diff it against `KNOWN_COMMANDS` in `policy.py`. Look for new
-   destructive verbs, new credential- or settings-related commands (block them), and new local-file flags.
-   Run `arcane-cli <group> --help` for each group, or ask Claude to walk `arcane_help`.
-4. Update `policy.py` and the tests, run `pytest`, then rebuild: `docker compose up -d --build`.
+3. Dump the new command tree (`arcane-cli <group> --help` for every group, or ask Claude to walk
+   `arcane_help`) into `tests/fixtures/cli-commands.txt`. `test_known_commands_match_pinned_cli` fails until
+   `KNOWN_COMMANDS` in `policy.py` matches it exactly.
+   Review every new path: look for destructive verbs, credential- or settings-related commands (block them),
+   and anything that reads a local file, whether as a flag or a positional argument (block it).
+4. Update `policy.py` and the tests, run `pytest`, then push. CI publishes the image, and Arcane picks it up.
+
+Also check the scan in Arcane afterwards (`images vulnerabilities image ghcr.io/joshnewman17/arcane-mcp:latest`).
+CLI releases are the usual fix for Go standard-library CVEs, since each release is built with a newer Go.
 
 The image downloads the release tarball (`arcane-cli_linux_<arch>.tar.gz`) directly rather than
 piping `install-cli.sh` to `sh`. Current releases ship tarballs, while the install script
@@ -290,7 +295,7 @@ downloads a bare binary name.
 
 ## Known gaps
 
-- The pinned v2.16.1 has no `podman` command group. The podman rules in `policy.py` cover the
-  documented commands for when it lands.
+- Podman commands that take a local file (`kube play|down`, `quadlets install`) and podman secret
+  create/update are blocked. Use the Arcane UI for those.
 - Swarm workflows, webhook creation, and REST writes are out of scope.
 - Re-check `/healthz` and a `containers list` after any CLI bump. The JSON shapes can change.

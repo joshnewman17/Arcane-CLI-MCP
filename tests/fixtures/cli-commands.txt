@@ -1,0 +1,316 @@
+# arcane-cli v2.17.0 command paths (one per line). Regenerate when bumping ARCANE_CLI_VERSION:
+# see README > Upgrading the pinned CLI.
+activities
+activities cancel
+activities clear
+activities get
+activities list
+admin
+admin api-keys
+admin api-keys create
+admin api-keys delete
+admin api-keys get
+admin api-keys list
+admin api-keys update
+admin backups
+admin backups create
+admin backups delete
+admin backups discover
+admin backups list
+admin backups policies
+admin backups policies update
+admin backups recovery
+admin backups recovery generate
+admin backups recovery set
+admin backups restore
+admin backups s3
+admin backups s3 create
+admin backups s3 delete
+admin backups s3 get
+admin backups s3 list
+admin backups s3 test
+admin backups s3 update
+admin backups upload
+admin events
+admin events delete
+admin events list
+admin events stats
+admin federated
+admin federated create
+admin federated delete
+admin federated get
+admin federated list
+admin federated update
+admin notifications
+admin notifications settings
+admin notifications settings delete
+admin notifications settings get
+admin notifications settings set
+admin notifications test
+admin oidc
+admin oidc create
+admin oidc delete
+admin oidc list
+admin oidc update
+admin roles
+admin roles assign
+admin roles assignments
+admin roles create
+admin roles delete
+admin roles get
+admin roles list
+admin roles permissions
+admin roles update
+admin users
+admin users create
+admin users delete
+admin users get
+admin users list
+admin users update
+auth
+auth api-keys
+auth api-keys create
+auth api-keys delete
+auth api-keys list
+auth federated
+auth login
+auth logout
+auth me
+auth oidc
+auth password
+auth refresh
+config
+config backup
+config init
+config path
+config set
+config show
+config test
+containers
+containers auto-update
+containers commit
+containers counts
+containers create
+containers delete
+containers edit
+containers get
+containers kill
+containers list
+containers pause
+containers redeploy
+containers restart
+containers start
+containers stop
+containers unpause
+containers update
+containers updates
+doctor
+environments
+environments create
+environments delete
+environments get
+environments list
+environments switch
+environments test
+environments update
+environments version
+generate
+generate apikey
+generate mtls
+generate secret
+generate tls
+gitops
+gitops create
+gitops delete
+gitops files
+gitops get
+gitops import
+gitops list
+gitops status
+gitops sync
+gitops update
+images
+images attestations
+images build
+images builds
+images builds get
+images counts
+images export
+images get
+images history
+images list
+images prune
+images pull
+images remove
+images search
+images tag
+images updates
+images updates check
+images updates summary
+images upload
+images vulnerabilities
+images vulnerabilities ignore
+images vulnerabilities ignored
+images vulnerabilities image
+images vulnerabilities list
+images vulnerabilities scan
+images vulnerabilities status
+images vulnerabilities summary
+images vulnerabilities unignore
+jobs
+jobs list
+jobs run
+jobs schedules
+jobs schedules get
+jobs schedules update
+networks
+networks connect
+networks counts
+networks create
+networks delete
+networks disconnect
+networks get
+networks list
+networks prune
+networks topology
+podman
+podman autoupdate
+podman kube
+podman kube down
+podman kube generate
+podman kube play
+podman pods
+podman pods create
+podman pods delete
+podman pods inspect
+podman pods list
+podman pods restart
+podman pods start
+podman pods stop
+podman quadlets
+podman quadlets delete
+podman quadlets get
+podman quadlets install
+podman quadlets list
+podman quadlets restart
+podman quadlets start
+podman quadlets stop
+podman secrets
+podman secrets create
+podman secrets delete
+podman secrets inspect
+podman secrets list
+podman secrets update
+podman status
+projects
+projects archive
+projects build
+projects counts
+projects create
+projects destroy
+projects down
+projects get
+projects list
+projects pull
+projects redeploy
+projects restart
+projects tag
+projects tags
+projects unarchive
+projects up
+projects update
+projects updates
+projects upgrade
+projects workspace
+projects workspace cat
+projects workspace download
+projects workspace update
+registries
+registries create
+registries delete
+registries get
+registries list
+registries test
+registries update
+registries usage
+repos
+repos branches
+repos create
+repos delete
+repos files
+repos get
+repos list
+repos test
+repos update
+self-update
+self-update channel
+self-update channel next
+self-update channel stable
+self-update run
+settings
+settings list
+settings public
+settings update
+system
+system containers
+system containers start
+system containers stop
+system convert
+system info
+system prune
+system upgrade
+templates
+templates content
+templates create
+templates default
+templates default save
+templates delete
+templates download
+templates fetch
+templates get
+templates list
+templates registries
+templates registries delete
+templates registries update
+templates update
+updater
+updater history
+updater run
+updater status
+variables
+variables create
+variables delete
+variables list
+variables sync
+variables update
+version
+volumes
+volumes backups
+volumes backups create
+volumes backups delete
+volumes backups download
+volumes backups files
+volumes backups list
+volumes backups policy
+volumes backups policy update
+volumes backups restore
+volumes backups upload
+volumes counts
+volumes create
+volumes delete
+volumes get
+volumes list
+volumes prune
+volumes rename
+volumes sizes
+volumes usage
+volumes workspace
+volumes workspace cat
+volumes workspace download
+volumes workspace put
+webhooks
+webhooks create
+webhooks delete
+webhooks list
+webhooks trigger
+webhooks update

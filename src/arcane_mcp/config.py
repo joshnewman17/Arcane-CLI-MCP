@@ -1,6 +1,6 @@
 """Environment-variable configuration for the server.
 
-The arcane-cli itself has no documented environment variables (as of v2.16.x).
+The arcane-cli itself has no documented environment variables (as of v2.17.x).
 It reads a YAML config file (default ``~/.config/arcanecli.yml``) with keys such
 as ``server_url``, ``api_key`` and ``default_environment``, and accepts
 ``--config <path>`` to point at a different file. So at startup we write a

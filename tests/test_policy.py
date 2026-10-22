@@ -36,6 +36,11 @@ BLOCKED_CASES = [
     ["volumes", "workspace", "put", "vol", "/etc/passwd", "/x"],
     ["volumes", "backups", "download", "v", "b"],
     ["templates", "download", "t1"],
+    ["podman", "kube", "play", "/data/pod.yaml"],
+    ["podman", "kube", "down", "/data/pod.yaml"],
+    ["podman", "quadlets", "install", "/data/app.container"],
+    ["podman", "secrets", "create", "s"],
+    ["podman", "secrets", "update", "s"],
 ]
 
 
@@ -73,8 +78,9 @@ CONFIRM_CASES = [
     ["containers", "delete", "web"],
     ["networks", "delete", "n1"],
     ["networks", "prune"],
-    ["podman", "secrets", "create", "s"],
-    ["podman", "secrets", "update", "s"],
+    ["podman", "secrets", "delete", "s"],
+    ["podman", "quadlets", "delete", "q"],
+    ["podman", "pods", "delete", "p"],
     ["gitops", "delete", "s1"],  # generic *delete* verb
     ["activities", "clear"],
 ]
@@ -121,6 +127,11 @@ READONLY_OK = [
     ["version"],
     ["projects", "redeploy", "--help"],
     ["variables", "sync", "--status"],
+    ["podman", "status"],
+    ["podman", "pods", "inspect", "p"],
+    ["podman", "quadlets", "list", "--status", "active"],
+    ["podman", "secrets", "inspect", "s"],
+    ["podman", "autoupdate", "--dry-run"],
 ]
 
 READONLY_DENY = [
@@ -138,6 +149,8 @@ READONLY_DENY = [
     ["variables", "sync"],
     ["containers", "brand-new-verb"],  # default deny for unknown commands
     ["newgroup", "list"],
+    ["podman", "autoupdate"],
+    ["podman", "pods", "restart", "p"],
 ]
 
 
@@ -205,6 +218,8 @@ def test_positional_named_like_blocked_group_is_not_blocked():
         (["projects", "destroy", "x", "--force=true"], ["projects", "destroy", "x"], ["--force=true"]),
         (["containers", "delete", "x", "-f"], ["containers", "delete", "x"], ["-f"]),
         (["volumes", "delete", "x", "-f"], ["volumes", "delete", "x"], ["-f"]),
+        (["podman", "quadlets", "delete", "q", "-f"], ["podman", "quadlets", "delete", "q"], ["-f"]),
+        (["podman", "autoupdate", "-f"], ["podman", "autoupdate"], ["-f"]),
         (["containers", "list", "--log-level", "debug"], ["containers", "list"], ["--log-level", "debug"]),
         (["containers", "list", "--log-json"], ["containers", "list"], ["--log-json"]),
     ],
@@ -268,3 +283,20 @@ def test_long_running(args):
 
 def test_not_long_running():
     assert ev("containers", "list").long_running is False
+
+
+def test_known_commands_match_pinned_cli():
+    # tests/fixtures/cli-commands.txt is `--help` of the pinned arcane-cli. A CLI bump must update both.
+    from pathlib import Path
+
+    lines = (Path(__file__).parent / "fixtures" / "cli-commands.txt").read_text().splitlines()
+    real = {tuple(line.split()) for line in lines if line and not line.startswith("#")}
+    assert policy.KNOWN_COMMANDS == real
+
+
+def test_every_policy_rule_targets_a_real_command():
+    for table in (policy.BLOCKED, policy.READONLY, policy.CONFIRM):
+        for rule in table:
+            assert rule.prefix in policy.KNOWN_COMMANDS, rule.prefix
+    for path in policy.LONG_RUNNING | policy.FORCE_SHORT_F:
+        assert path in policy.KNOWN_COMMANDS, path

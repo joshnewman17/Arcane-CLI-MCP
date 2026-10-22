@@ -14,7 +14,7 @@ Evaluation order (first match wins):
 4. ``CONFIRM``, plus any command whose final word is in ``CONFIRM_VERBS``:
    these need ``confirm=true``. Without it the command does not run.
 
-Verified against ``arcane-cli`` v2.16.1 ``--help``. Re-check this file when you
+Verified against ``arcane-cli`` v2.17.0 ``--help``. Re-check this file when you
 bump ``ARCANE_CLI_VERSION``; ``tests/test_policy.py`` covers every rule.
 """
 
@@ -90,6 +90,13 @@ BLOCKED: tuple[Rule, ...] = (
     Rule(_p("volumes backups download"), _LOCAL_FS),
     Rule(_p("volumes backups upload"), _LOCAL_FS),
     Rule(_p("templates download"), _LOCAL_FS),
+    Rule(_p("podman kube play"), _LOCAL_FS),
+    Rule(_p("podman kube down"), _LOCAL_FS),
+    Rule(_p("podman quadlets install"), _LOCAL_FS),
+    # The secret value can only come from --file (a local file) or stdin (never connected),
+    # so through MCP these could only create empty secrets.
+    Rule(_p("podman secrets create"), f"Secret values can't be passed safely through MCP. {_UI}"),
+    Rule(_p("podman secrets update"), f"Secret values can't be passed safely through MCP. {_UI}"),
 )
 
 # --- 3. Read-only allowlist (default deny in read-only mode) -------------------
@@ -124,11 +131,13 @@ READONLY: tuple[Rule, ...] = tuple(
         "volumes backups files", "volumes backups list", "volumes counts", "volumes get", "volumes list",
         "volumes sizes", "volumes usage", "volumes workspace cat",
         "webhooks list",
-        "podman status", "podman pods list",
+        "podman status", "podman pods list", "podman pods inspect", "podman quadlets list", "podman quadlets get",
+        "podman secrets list", "podman secrets inspect", "podman kube generate",
     )
 ) + (
     Rule(_p("system upgrade"), requires_flags=("--check", "--status")),
     Rule(_p("variables sync"), requires_flags=("--status",)),
+    Rule(_p("podman autoupdate"), requires_flags=("--dry-run",)),
 )
 
 # --- 4. Require confirm=true ---------------------------------------------------
@@ -147,8 +156,6 @@ CONFIRM: tuple[Rule, ...] = (
     Rule(_p("networks delete"), "Removes a network."),
     Rule(_p("networks prune"), "Removes all unused networks."),
     Rule(_p("activities clear"), "Clears activity history."),
-    Rule(_p("podman secrets create"), "Writes a secret."),
-    Rule(_p("podman secrets update"), "Overwrites a secret."),
 )
 
 # Any command whose final word is one of these also needs confirm=true.
@@ -161,11 +168,11 @@ LONG_RUNNING: frozenset[Path] = frozenset(
         "projects up", "projects redeploy", "projects pull", "projects build", "projects upgrade",
         "images pull", "images build",
         "containers update", "containers redeploy",
-        "updater run", "gitops sync", "system prune", "images vulnerabilities scan",
+        "updater run", "gitops sync", "system prune", "images vulnerabilities scan", "podman autoupdate",
     )
 )
 
-# Every command path in arcane-cli v2.16.1 (plus documented podman commands).
+# Every command path in arcane-cli v2.17.0.
 # Used to work out where the command path ends and positional arguments begin.
 KNOWN_COMMANDS: frozenset[Path] = frozenset(
     _p(s)
@@ -220,10 +227,12 @@ volumes backups restore;volumes backups upload;volumes counts;volumes create;vol
 volumes list;volumes prune;volumes rename;volumes sizes;volumes usage;volumes workspace;
 volumes workspace cat;volumes workspace download;volumes workspace put;webhooks;webhooks create;
 webhooks delete;webhooks list;webhooks trigger;webhooks update;
-podman;podman status;podman pods;podman pods list;podman pods create;podman pods stop;podman pods delete;
-podman quadlets;podman quadlets install;podman quadlets start;podman kube;podman kube play;
-podman kube down;podman kube generate;podman secrets;podman secrets create;podman secrets update;
-podman autoupdate
+podman;podman autoupdate;podman kube;podman kube down;podman kube generate;podman kube play;podman pods;
+podman pods create;podman pods delete;podman pods inspect;podman pods list;podman pods restart;podman pods start;
+podman pods stop;podman quadlets;podman quadlets delete;podman quadlets get;podman quadlets install;
+podman quadlets list;podman quadlets restart;podman quadlets start;podman quadlets stop;podman secrets;
+podman secrets create;podman secrets delete;podman secrets inspect;podman secrets list;podman secrets update;
+podman status
 """.replace("\n", "").split(";")
     if s.strip()
 )
@@ -245,7 +254,8 @@ FORCE_SHORT_F: frozenset[Path] = frozenset(
     for s in (
         "activities cancel", "activities clear", "containers delete", "images remove",
         "networks delete", "networks prune", "projects destroy", "system upgrade",
-        "volumes delete", "volumes prune", "podman pods delete",
+        "volumes delete", "volumes prune", "podman pods delete", "podman quadlets delete",
+        "podman secrets delete", "podman autoupdate", "podman kube down",
         "admin events delete", "gitops delete", "registries delete", "repos delete",
         "templates delete", "variables delete", "webhooks delete", "environments delete",
         "volumes backups delete", "admin backups delete", "admin backups s3 delete",

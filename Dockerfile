@@ -4,7 +4,7 @@ ARG PYTHON_VERSION=3.12
 
 # --- 1. Fetch the pinned arcane-cli release ------------------------------------
 FROM debian:bookworm-slim AS cli
-ARG ARCANE_CLI_VERSION=2.16.1
+ARG ARCANE_CLI_VERSION=2.17.0
 # Optional: pin the tarball checksum, e.g. --build-arg ARCANE_CLI_SHA256=<sha256 of arcane-cli_linux_amd64.tar.gz>
 ARG ARCANE_CLI_SHA256=""
 ARG TARGETARCH
@@ -27,12 +27,14 @@ ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY src ./src
-RUN python -m venv /opt/venv \
- && /opt/venv/bin/pip install .
+# The venv gets no pip of its own; the base image's pip installs into it. pip is a build tool
+# with its own CVEs and is never needed at runtime, so it must not reach the final image.
+RUN python -m venv --without-pip /opt/venv \
+ && pip --python /opt/venv/bin/python install .
 
 # --- 3. Runtime ------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim
-ARG ARCANE_CLI_VERSION=2.16.1
+ARG ARCANE_CLI_VERSION=2.17.0
 # Unraid convention: nobody:users (99:100), so /data on the array is writable.
 ARG PUID=99
 ARG PGID=100
@@ -40,6 +42,10 @@ ARG PGID=100
 LABEL org.opencontainers.image.title="arcane-mcp" \
       org.opencontainers.image.description="Remote MCP server for Arcane, wrapping arcane-cli" \
       io.getarcane.cli.version="${ARCANE_CLI_VERSION}"
+
+# Remove pip (and the ensurepip wheels) from the runtime image; nothing installs packages at runtime.
+RUN python -m pip uninstall -y pip \
+ && rm -rf /usr/local/lib/python3.*/ensurepip
 
 RUN set -eu; \
     getent group "${PGID}" >/dev/null || groupadd -g "${PGID}" arcane; \
