@@ -307,17 +307,19 @@ class CliRunner:
             self.audit.record(**audit, outcome="rejected", reason=str(exc), exit_code=None, duration_ms=0)
             return {"ok": False, "error": str(exc)}
 
-        run_args, keep = decision.args, None
+        run_args, keep, rest, fetch = decision.args, None, decision.args, 0
         if exclude_types:
-            # Over-fetch so that `--limit N` still returns about N activities after filtering.
+            # `--limit N` means N rows in the result, after excluding and folding repeats, so over-fetch.
             requested, rest = _limit(decision.args)
             if "--all" not in rest:
                 keep = requested or ACTIVITIES_DEFAULT_LIMIT
-                run_args = rest + ["--limit", str(min(max(keep * 5, 50), ACTIVITIES_MAX_FETCH))]
+                fetch = min(max(keep * 5, 50), ACTIVITIES_MAX_FETCH)
+                run_args = rest + ["--limit", str(fetch)]
 
-        cmd_args = run_args + (["--env", env] if env is not None else []) + ["--json"]
-        if confirm:
-            cmd_args.append("--yes")
+        def with_env(a: list[str]) -> list[str]:
+            return a + (["--env", env] if env is not None else []) + ["--json"] + (["--yes"] if confirm else [])
+
+        cmd_args = with_env(run_args)
         audit["argv"] = cmd_args
         base: dict[str, Any] = {"command": self.display(cmd_args)}
         if decision.stripped:
@@ -353,6 +355,19 @@ class CliRunner:
         stderr = self.redactor.text(stderr)  # stdout is redacted in _shape, after JSON parsing
         result = self._shape(base, code, stdout, stderr, decision.command_path, compact=compact,
                              exclude=exclude_types, keep=keep, filters=filters)
+        if (keep is not None and result["ok"] and not timed_out and fetch < ACTIVITIES_MAX_FETCH
+                and result.get("_fetched") == fetch and result.get("_rows", keep) < keep):
+            # A full page and still too few rows: there is more to look through, so fetch the maximum once.
+            cmd_args = with_env(rest + ["--limit", str(ACTIVITIES_MAX_FETCH)])
+            audit["argv"] = cmd_args
+            base["command"] = self.display(cmd_args)
+            code, stdout, stderr, timed_out = self.exec(self.base_argv() + cmd_args, timeout)
+            duration_ms = int((time.monotonic() - started) * 1000)
+            stderr = self.redactor.text(stderr)
+            result = self._shape(base, code, stdout, stderr, decision.command_path, compact=compact,
+                                 exclude=exclude_types, keep=keep, filters=filters)
+        result.pop("_fetched", None)
+        result.pop("_rows", None)
         if timed_out:
             result.update(ok=False, timed_out=True,
                           error=f"Timed out after {timeout}s. The operation may still be running in Arcane; "
@@ -370,9 +385,9 @@ class CliRunner:
         if parsed:
             data = compact_mod.cleanup(self.redactor.obj(data))
             if exclude:
+                if isinstance(data, dict) and isinstance(data.get("data"), list):
+                    result["_fetched"] = len(data["data"])
                 data, result["excluded"] = compact_mod.exclude_types(data, exclude)
-                if keep is not None and isinstance(data, dict) and isinstance(data.get("data"), list):
-                    data = {**data, "data": data["data"][:keep]}
             if filters:
                 data, matched = compact_mod.apply_filters(path, data, filters)
                 if matched is not None:
@@ -383,6 +398,9 @@ class CliRunner:
                 data, compacted = compact_mod.compact(path, data)
                 if compacted:
                     result["compact"] = True
+            if keep is not None and isinstance(data, dict) and isinstance(data.get("data"), list):
+                result["_rows"] = len(data["data"])
+                data = {**data, "data": data["data"][:keep]}
             data, note = fit_output(data, limit)
             result["data"] = data
         else:

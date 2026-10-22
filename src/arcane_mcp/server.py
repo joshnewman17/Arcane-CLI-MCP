@@ -78,7 +78,8 @@ Pass compact=false for the full objects.
 Filters, applied by the server to the items the CLI returned (use --all so they see every page):
 filter_state (e.g. running, exited, created), filter_has_update, filter_project, name_contains.
 exclude_types (activities list only), e.g. ["job_run", "image_update_check"], drops noisy activity types
-and over-fetches so `--limit N` still yields about N entries.
+and with it `--limit N` (default 20) is the number of rows returned, after excluding and folding repeats
+(the server fetches more activities to fill them).
 
 Streaming commands (projects up/redeploy/pull/build, images pull/build, containers update) can take
 up to 30 minutes and return an array of progress frames when done.
