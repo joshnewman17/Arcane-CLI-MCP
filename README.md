@@ -180,12 +180,12 @@ image, so nothing is built on the host.
        restart: unless-stopped
        dns: [192.168.14.1]
        environment:
-         ARCANE_URL: http://10.1.21.104:3552 # Arcane itself (VLAN 21); OPNsense rule DMZ .18 -> :3552
-         ARCANE_API_KEY: ${ARCANE_API_KEY}
-         CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN}
-         CF_ACCESS_AUD: ${CF_ACCESS_AUD}
+         ARCANE_URL: ${ARCANE_URL:?set ARCANE_URL in .env}
+         ARCANE_API_KEY: ${ARCANE_API_KEY:?set ARCANE_API_KEY in .env}
+         CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:?set CF_ACCESS_TEAM_DOMAIN in .env}
+         CF_ACCESS_AUD: ${CF_ACCESS_AUD:?set CF_ACCESS_AUD in .env}
          AUDIT_LOG_PATH: /data/audit.log
-         TZ: ${TZ}
+         TZ: ${TZ:-America/Chicago}
        volumes:
          - data:/data
        tmpfs:
@@ -205,8 +205,8 @@ image, so nothing is built on the host.
        restart: unless-stopped
        command: tunnel run
        environment:
-         TUNNEL_TOKEN: ${TUNNEL_TOKEN}
-         TZ: ${TZ}
+         TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+         TZ: ${TZ:-America/Chicago}
        dns: [192.168.14.1]
        depends_on: [arcane-cli-mcp]
        networks:
@@ -221,7 +221,18 @@ image, so nothing is built on the host.
      data:
    ```
 
-   Its **.env** in Arcane: `ARCANE_API_KEY`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `TUNNEL_TOKEN`, `TZ`.
+   Its **.env** in Arcane (values are substituted into the compose file; a missing one fails the deploy with a clear message):
+
+   ```
+   # Arcane itself on VLAN 21 (OPNsense rule: DMZ 192.168.14.18 -> 10.1.21.104:3552)
+   ARCANE_URL=http://10.1.21.104:3552
+   ARCANE_API_KEY=<scoped Arcane API key>
+   CF_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com
+   CF_ACCESS_AUD=<Access application AUD tag>
+   TUNNEL_TOKEN=<tunnel connector token>
+   TZ=America/Chicago
+   ```
+
    Each value goes only to the container that needs it, so the tunnel token never reaches the MCP server.
    (`projects create -f` is blocked through arcane-mcp because it reads a local file, so this step happens in the UI.)
 3. **OPNsense:** a pass rule on the DMZ interface: `192.168.14.18/32` → `10.1.21.104/32` TCP `3552`, placed
