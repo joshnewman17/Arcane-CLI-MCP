@@ -8,7 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = sorted(p for p in (ROOT / "skills").iterdir() if p.is_dir())
-TOOLS = {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments"}
+TOOLS = {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments", "arcane_project_compose"}
 
 
 def frontmatter(path: Path) -> dict:

@@ -18,18 +18,25 @@ REDACTED = "[REDACTED]"
 current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
 
 # Patterns that look like credentials in free text, even when we don't know the exact value.
-# The value may not start with `{` or `[`, so `"apiKey": {...}` in JSON-ish text is left alone.
+# The value may not start with `{`, `[`, `$`, `?` or `-`, so `"apiKey": {...}` in JSON-ish text and
+# compose placeholders like `ARCANE_API_KEY: ${ARCANE_API_KEY:?required}` are left alone.
 _PATTERNS = [
-    re.compile(r"(?i)(x-api-key\s*[:=]\s*)(?![{\[])([^\s,;\"']+)"),
-    re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)(?![{\[])([^\s,;\"']+)"),
-    re.compile(r"(?i)(\"?api[_-]?key\"?\s*[:=]\s*\"?)(?![{\[])([^\s,;\"']+)"),
-    re.compile(r"(?i)(\"?(?:access|refresh|jwt)[_-]?token\"?\s*[:=]\s*\"?)(?![{\[])([^\s,;\"']+)"),
+    re.compile(r"(?i)(x-api-key\s*[:=]\s*)(?![{\[$?-])([^\s,;\"']+)"),
+    re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)(?![{\[$?-])([^\s,;\"']+)"),
+    re.compile(r"(?i)(\"?api[_-]?key\"?\s*[:=]\s*\"?)(?![{\[$?-])([^\s,;\"']+)"),
+    re.compile(r"(?i)(\"?(?:access|refresh|jwt)[_-]?token\"?\s*[:=]\s*\"?)(?![{\[$?-])([^\s,;\"']+)"),
+    # .env-style lines whose key names a credential: `TUNNEL_TOKEN=eyJ...`, `DB_PASSWORD=...`.
+    re.compile(
+        r"(?m)^(\s*(?:export\s+)?[A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|COOKIE)[A-Z0-9_]*\s*=\s*)"
+        r"(?![$\s])(.+)$"
+    ),
 ]
 
-# Object keys whose string values are credentials.
+# Object keys whose string values are credentials. `envContent` is a whole project .env file
+# (Arcane returns it from the project compose endpoint), so it is withheld entirely.
 _SECRET_KEYS = re.compile(
     r"(?i)^(x-)?(api[_-]?key|(access|refresh|jwt|auth|tunnel|bearer)?[_-]?token|password|passwd|"
-    r"secret|client[_-]?secret|private[_-]?key)$"
+    r"secret|client[_-]?secret|private[_-]?key|env[_-]?content)$"
 )
 
 

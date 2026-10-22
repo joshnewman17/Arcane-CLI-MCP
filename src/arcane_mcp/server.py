@@ -25,6 +25,7 @@ from .access import AccessDenied, AccessVerifier
 from .api import ApiClient
 from .audit import AuditLog, Redactor, current_user
 from .cli import CliRunner
+from .compose_edit import ComposeEditor
 from .config import ConfigError, Settings, load_settings, write_cli_config
 
 log = logging.getLogger("arcane_mcp")
@@ -45,6 +46,9 @@ Workflow:
   on your own initiative.
 - Some commands are blocked (auth, users/roles, self-update, Arcane upgrades, backup restore,
   generate). Tell the user to do those in the Arcane web UI.
+- To change a project's compose file use arcane_project_compose (read it first, then write the full
+  file; writes return a diff and need the user's confirmation). Project .env files hold secrets and
+  are only edited in the Arcane UI.
 """
 
 RUN_DESCRIPTION = """\
@@ -101,6 +105,24 @@ Examples:
 - {"path": "/api/openapi.json"}
 """
 
+COMPOSE_DESCRIPTION = """\
+Read or replace a project's compose file (docker-compose YAML).
+
+- Read: pass only `project`. Returns the current compose file (values that look like secrets are
+  hidden as [REDACTED]). The project's .env is never returned: it holds secrets and is edited in the
+  Arcane UI only. Reference its values from compose as ${VAR}.
+- Write: pass `project` and `compose` (the COMPLETE new file, not a fragment). Without confirm=true
+  nothing changes: the result has needs_confirmation=true and a unified diff. Show the user the diff,
+  and only after they approve it, call again with the same compose and confirm=true.
+- Writing does not redeploy. Afterwards, with the user's OK, run arcane_run ['projects', 'redeploy', <project>].
+- Content containing [REDACTED] is refused, so a hidden value is never written back over the real one.
+
+Examples:
+- {"project": "immich"}                                   (read)
+- {"project": "immich", "compose": "services:\n  ...", "env_id": "0"}   (returns a diff to approve)
+- {"project": "immich", "compose": "services:\n  ...", "confirm": true}  (after the user approved)
+"""
+
 ENV_DESCRIPTION = """\
 List Arcane environments (Docker hosts) as a small payload of {id, name, status}, plus the server's
 default env_id. Call this first and pass the chosen id as `env_id` to arcane_run.
@@ -132,6 +154,7 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     runner = runner or CliRunner(settings, redactor, audit)
     api = api or ApiClient(settings, redactor, audit)
     health = HealthCache(runner)
+    compose_editor = ComposeEditor(runner, api, redactor, audit)
 
     mcp = MCPServer(name="arcane-mcp", version=__version__, instructions=INSTRUCTIONS)
 
@@ -173,6 +196,18 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     def arcane_api_get(path: str, query: dict[str, Any] | None = None,
                        ctx: Context | None = None) -> dict[str, Any]:
         return as_caller(ctx, lambda: api.get(path, query))
+
+    @mcp.tool(
+        name="arcane_project_compose",
+        description=COMPOSE_DESCRIPTION,
+        annotations=ToolAnnotations(title="Read or replace a project's compose file", destructive_hint=True,
+                                    open_world_hint=False),
+    )
+    def arcane_project_compose(project: str, compose: str | None = None, env_id: str | None = None,
+                               confirm: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+        if compose is None:
+            return as_caller(ctx, lambda: compose_editor.read(project, env_id))
+        return as_caller(ctx, lambda: compose_editor.write(project, compose, env_id, confirm))
 
     @mcp.tool(
         name="arcane_environments",

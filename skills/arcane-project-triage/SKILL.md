@@ -18,12 +18,12 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_help`, `arcane_api_get` (rea
 3. **Container states.** `["containers", "list", "--all"]`, filtered to the project's containers (`--label com.docker.compose.project=<project>` works when the label is present). For each container that isn't running and healthy: `["containers", "get", "<name>"]`. Look at the state, exit code, restart count, health check output, and ports.
 4. **Recent activity.** `["activities", "list", "--limit", "20"]` and `["activities", "list", "--status", "failed", "--limit", "10"]`. Open relevant ones with `["activities", "get", "<id>"]`.
 5. **Context if needed:**
-   - Compose file: `["projects", "workspace", "cat", "<project>", "compose.yaml"]` (check the file name via `projects get`). Don't echo secrets from `.env` files back to the user.
+   - Compose file: `arcane_project_compose {"project": "<project>"}`. The project's `.env` isn't available through MCP; ask the user if a value matters.
    - Pending image updates: `["projects", "updates"]`.
    - Disk pressure: `["volumes", "sizes"]`, `["system", "info"]`.
    - Network problems: `["networks", "topology"]`.
 6. **Diagnose.** Give the most likely cause with the evidence (quote the exact error lines), plus alternatives if it's uncertain.
-7. **Propose a fix** and say exactly which command(s) you'd run, e.g. `["containers", "restart", "<name>"]`, `["projects", "restart", "<project>"]`, or `["projects", "redeploy", "<project>"]` (redeploy pulls images and recreates containers).
+7. **Propose a fix** and say exactly which command(s) you'd run, e.g. `["containers", "restart", "<name>"]`, `["projects", "restart", "<project>"]`, or `["projects", "redeploy", "<project>"]` (redeploy pulls images and recreates containers). If the fix is a compose change, write the full new file with `arcane_project_compose`: it returns a diff to show the user, and only applies with `confirm=true` after they approve. Then redeploy.
 8. **Only after the user confirms**, run the fix. Redeploy can take several minutes and returns progress frames. Then re-check the container states and activities to verify the stack is healthy.
 
 ## Finish

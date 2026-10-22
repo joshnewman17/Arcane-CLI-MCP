@@ -24,6 +24,7 @@ Arcane instance (LAN)
 | `arcane_help(command=[])` | `arcane-cli <command> --help`, so Claude can discover flags instead of guessing. |
 | `arcane_api_get(path, query?)` | Read-only `GET /api/...` escape hatch for data the CLI doesn't expose. The spec lives at `/api/openapi.json`. |
 | `arcane_environments()` | `{id, name, status}` for each environment, so Claude can pick an `env_id`. |
+| `arcane_project_compose(project, compose?, env_id?, confirm=false)` | Reads a project's compose file, or replaces it with the full new content. A write first returns `needs_confirmation` with a diff, and only runs with `confirm=true`. The project's `.env` is never read or written here, and nothing is redeployed. |
 
 ### Safety model (enforced in code: [`policy.py`](src/arcane_mcp/policy.py))
 
@@ -48,6 +49,13 @@ Arcane instance (LAN)
 - **Rejected flags:** `--config`/`-c` (the server owns the CLI config), `--env` (use `env_id`), and
   local-file flags (`--file`/`-f`, `--env-file`, `--dockerfile-inline`, ...). Bundled short flags
   (`-yf`) and control characters are rejected too.
+- **Compose edits** go through `arcane_project_compose` instead of `projects update -f`. The caller sends
+  content, and the server writes it to its own private temp file and uploads exactly that. A local-file flag
+  could upload anything in the container (e.g. the CLI config holding the API key), so those stay rejected.
+  The content must parse as compose YAML with `services`. Writes need `confirm=true` (after a diff) and are
+  blocked in read-only mode. Content containing `[REDACTED]` is refused, so a value hidden on read can't be
+  written back over the real one. Project `.env` files (secrets) are never returned or written: Arcane's
+  compose endpoint includes `envContent`, which the redactor withholds.
 - **Secrets:** the API key is written to a `0600` CLI config file on a tmpfs and passed with
   `--config`. The CLI child process gets a minimal environment (no key, no MCP token). All tool
   output and audit lines go through a redactor that removes the key, the MCP token, and anything

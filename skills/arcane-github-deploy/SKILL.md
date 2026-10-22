@@ -5,7 +5,7 @@ description: Deploy a GitHub repository to an Arcane environment as a regular co
 
 # Deploy a GitHub repo through Arcane (CI + GHCR)
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help`, `arcane_api_get` (arcane-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_project_compose`, `arcane_help`, `arcane_api_get` (arcane-mcp server).
 Templates: `templates/` next to this file.
 
 This pattern has GitHub Actions build the image and push it to GHCR. The project is a normal Arcane
@@ -45,6 +45,8 @@ credentials shouldn't pass through you. So these steps happen in the UI:
    - The registry's "Repository Names" field only matters for pushing from the build page. It doesn't affect pulls.
    - "Pull usage" counts successful pulls only. Public images succeed with any token, so a non-zero count doesn't prove private access works.
 2. **Projects → Create:** the project name, the compose file from Phase 2, and the `.env` with the secret values.
+   Creating a project needs the UI. After that, compose changes can go through `arcane_project_compose`
+   (diff → user approval → `confirm=true`), while the `.env` always stays in the UI.
 
 ## Phase 4: Deploy (through arcane-mcp)
 1. Check the project exists: `["projects", "get", "<project>"]` (status `stopped`, `serviceCount` as expected).
@@ -58,7 +60,12 @@ credentials shouldn't pass through you. So these steps happen in the UI:
 ## Updating later
 - After CI publishes a new image: `["projects", "redeploy", "<project>"]` pulls `:latest` and recreates the container. Check the `Digest:` frame against the CI run, then re-verify as in Phase 4.
 - Arcane's image-update checks flag new `latest` digests (`["containers", "updates"]`), and Arcane auto-update can redeploy automatically if the user enabled it.
-- To change the compose file or `.env`, the user edits the project in the Arcane UI, then you run `redeploy`.
+- To change the compose file: read it with `arcane_project_compose {"project": "<project>"}`, write the full new
+  file (show the user the returned diff, apply with `confirm=true` after they approve), then `redeploy`.
+  `.env` changes are made by the user in the Arcane UI.
+- If a compose save in the Arcane UI doesn't stick (e.g. a project that used to be Git-synced), check
+  `["admin", "events", "list", "--all"]` for the `project.update` event: its metadata shows `composeUpdated` /
+  `envUpdated`. Writing through `arcane_project_compose` works around a stuck editor.
 - After an update, `["images", "prune", "--dangling"]` (needs confirm) removes the replaced image. Show its scope first, because it also removes other services' unused untagged images.
 
 ## Troubleshooting `denied` on pull
