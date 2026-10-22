@@ -12,11 +12,28 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_help` (arcane-cli-mcp server
 - Never bulk-update. One container per approval, one at a time.
 - A result with `needs_confirmation: true` means stop and ask the user. Never retry with `confirm=true` on your own.
 - If a flag is unclear, check `arcane_help` instead of guessing.
+- **Never update the MCP server's own deployment** (project `arcane-cli-mcp` and its tunnel container): it would drop
+  this conversation's connection mid-call. Those calls return `self_target: true`. List it as "update from the Arcane
+  UI" and move on. Never set `allow_self=true` yourself.
+- **Don't assume anything updates itself.** A container's `autoUpdate: true` only means it's *eligible*. Whether Arcane
+  actually auto-updates depends on the **Auto Update** job: check `["jobs", "list"]`. If that job is disabled or has
+  `unmetPrerequisites`, nothing is updated automatically; say so.
 
 ## Steps
-1. **Find updates.** `arcane_run {"args": ["containers", "updates", "--all"]}`.
-   For background, also check `["updater", "status"]` and `["updater", "history", "-n", "10"]`. If the Arcane auto-updater already handles some containers, say so.
-2. **Summarise** in a short table: container, current image/tag, project (if any), and anything notable (databases, reverse proxy, auth, or anything other services depend on). Flag the risky ones.
+1. **Find updates.** `arcane_run {"args": ["containers", "updates", "--all"]}`
+   (or `{"args": ["containers", "list", "--all"], "filter_has_update": true}`).
+   For background, check `["jobs", "list"]` (is the Auto Update job enabled?), `["updater", "status"]` and
+   `["updater", "history", "-n", "10"]`.
+   Containers with `image_untagged: true` run an image Arcane only knows by its sha256 id, so they have no update
+   status at all. Mention them separately rather than reporting them as up to date.
+2. **Summarise** in a short table: container, current image/tag, project (if any), and a risk note. Flag as higher risk:
+   - **Moving tags**: `:latest`, `:nightly`, `:dev`, `:edge`, `main-*`/`develop-*`. The update can be any amount of
+     upstream change (e.g. a `mealie:nightly` update is an unreviewed snapshot). Prefer pinning a release tag.
+   - **Databases** (postgres, mysql/mariadb, mongo, redis with persistence). For **postgres**, only digest or minor
+     updates within the same major version (`postgres:14` → newer `14.x`) are routine. A major bump (14 → 15+) needs
+     a dump/restore or `pg_upgrade` and will not start on the old data directory: never propose it as a plain
+     update, warn explicitly, and suggest a backup and a separate migration plan.
+   - Core infrastructure: reverse proxy, DNS, auth/SSO, tunnels, anything other services depend on.
 3. **Ask** which containers to update, and in what order. Suggest leaf services first and core infrastructure (proxy, DNS, databases) last.
 4. **For each approved container, one at a time:**
    1. `["containers", "update", "<name>"]` (this can take minutes while the image pulls).

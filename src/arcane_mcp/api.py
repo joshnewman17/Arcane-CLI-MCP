@@ -10,6 +10,7 @@ from urllib.parse import unquote
 
 import httpx
 
+from . import compact as compact_mod
 from .audit import AuditLog, Redactor
 from .cli import fit_output, truncate_text
 from .config import Settings
@@ -75,11 +76,15 @@ class ApiClient:
             transport=transport,
         )
 
-    def get(self, path: str, query: dict[str, Any] | None = None) -> dict[str, Any]:
+    def get(self, path: str, query: dict[str, Any] | None = None, fields: list[str] | None = None,
+            compact: bool = True) -> dict[str, Any]:
         started = time.monotonic()
         try:
             validate_path(path)
             params = validate_query(query)
+            if fields is not None and (not isinstance(fields, list) or not all(
+                    isinstance(f, str) and f.strip(".") for f in fields)):
+                raise ApiPathError("fields must be a list of field names or dotted paths, e.g. ['id', 'state.status']")
         except ApiPathError as exc:
             self.audit.record(tool="arcane_api_get", path=path, outcome="rejected", reason=str(exc))
             return {"ok": False, "error": str(exc)}
@@ -101,7 +106,13 @@ class ApiClient:
             return result
         try:
             # Parse first, then redact the structure: regex redaction on raw JSON can break it.
-            parsed = self.redactor.obj(json.loads(resp.text))
+            parsed = compact_mod.cleanup(self.redactor.obj(json.loads(resp.text)))
+            if fields:
+                parsed = compact_mod.pick_fields(parsed, fields)
+            elif compact:
+                parsed, compacted = compact_mod.compact_api(path, parsed)
+                if compacted:
+                    result["compact"] = True
             data, note = fit_output(parsed, self.settings.max_output_chars)
             result["data"] = data
         except json.JSONDecodeError:

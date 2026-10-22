@@ -46,6 +46,8 @@ Workflow:
   on your own initiative.
 - Some commands are blocked (auth, users/roles, self-update, Arcane upgrades, backup restore,
   generate). Tell the user to do those in the Arcane web UI.
+- self_target=true means the command would restart this MCP server (its own project or containers) and
+  the call would drop. Recommend the Arcane UI; never set allow_self=true on your own initiative.
 - To change a project's compose file use arcane_project_compose (read it first, then write the full
   file; writes return a diff and need the user's confirmation). Project .env files hold secrets and
   are only edited in the Arcane UI.
@@ -54,30 +56,49 @@ Workflow:
 RUN_DESCRIPTION = """\
 Run an arcane-cli command against the Arcane instance and return its JSON output.
 
-`args` is the command and its arguments WITHOUT the binary name. The server always adds `--json`,
-`--env <env_id>` and, only when confirm=true, `--yes`. Any `--yes`/`-y`/`--force`/`--json`/`--output`
-you pass is stripped. Use `env_id` instead of `--env`. Flags that read local files (`--file`,
-`--env-file`, ...) are rejected.
+`args` is the command and its arguments WITHOUT the binary name. The server adds `--json`, `--env <env_id>`
+(for environment-scoped commands) and, only when confirm=true, `--yes`. Any `--yes`/`-y`/`--force`/`--json`/
+`--output` you pass is stripped. Use `env_id` (an id or an environment name such as "Node804") instead of
+`--env`. Flags that read local files (`--file`, `--env-file`, ...) are rejected. `--help` is answered as
+by arcane_help.
 
-Result: {ok, exit_code, data, stderr_tail, command}. List commands return {data, pagination};
-use --limit/--start or filters when output is truncated (`--all` cannot be combined with --limit).
-With compact=true (default), list commands for containers, projects, images, volumes, networks,
-activities and vulnerabilities return one short summary per item (name, image, state, health,
-project, ports, hasUpdate, ...) and the result has compact=true. Pass compact=false for the full
-objects, or use the matching `get` command for one item.
+Result: {ok, exit_code, data, error, stderr_tail, command}. On failure `error` holds the CLI's message.
+List commands return {data, pagination}; use --limit/--start or filters when output is truncated (`--all`
+cannot be combined with --limit).
+With compact=true (default):
+- list commands for containers, projects, images, volumes, networks, activities and vulnerabilities return
+  one short summary per item (name, image, state, health, project, ports, hasUpdate, ...). A container
+  whose image is only a sha256 id has image_untagged=true: Arcane can't check it for updates.
+- `activities list` folds consecutive identical entries into one with repeated/firstAt/lastAt.
+- `volumes sizes` returns a summary plus the largest named and anonymous volumes; `jobs list` returns
+  {id, name, enabled, schedule, nextRun, lastRun, currentRun, unmetPrerequisites} per job;
+  `containers get` drops image-metadata labels (org.opencontainers.*, ...).
+Pass compact=false for the full objects.
+
+Filters, applied by the server to the items the CLI returned (use --all so they see every page):
+filter_state (e.g. running, exited, created), filter_has_update, filter_project, name_contains.
+exclude_types (activities list only), e.g. ["job_run", "image_update_check"], drops noisy activity types
+and over-fetches so `--limit N` still yields about N entries.
+
 Streaming commands (projects up/redeploy/pull/build, images pull/build, containers update) can take
 up to 30 minutes and return an array of progress frames when done.
 
 If the result has needs_confirmation=true, NOTHING was changed: show the user the command and ask.
 Retry with confirm=true only after they approve. Blocked commands fail even with confirm=true.
+If the result has self_target=true, the command would restart this MCP server itself (its own project or
+containers) and the call would drop. Suggest the Arcane UI; only if the user explicitly insists, retry
+with confirm=true and allow_self=true.
+
+To know whether a newer Arcane exists, use `version` (updateAvailable). `system upgrade --check` reports
+canUpgrade, which only means the upgrade mechanism works.
 
 Examples:
-- {"args": ["containers", "list", "--all"]}
-- {"args": ["containers", "updates"], "env_id": "0"}
+- {"args": ["containers", "list", "--all"], "filter_has_update": true}
+- {"args": ["containers", "updates"], "env_id": "Node804"}
 - {"args": ["projects", "redeploy", "immich"], "env_id": "0"}
 - {"args": ["projects", "destroy", "old-stack", "--remove-files=false"], "confirm": true}
   (only after the user explicitly approved this exact command)
-- {"args": ["activities", "list", "--status", "failed", "--limit", "10"]}
+- {"args": ["activities", "list", "--status", "failed", "--limit", "10"], "exclude_types": ["job_run"]}
 """
 
 HELP_DESCRIPTION = """\
@@ -96,12 +117,17 @@ Read-only escape hatch: GET a path on the Arcane REST API and return the JSON. U
 that arcane-cli does not expose. Every request carries the server's API key; you never need to send
 one. Only GET is supported, and `path` must start with /api/ (no full URLs, no '..').
 
+`fields` (top-level names or dotted paths) keeps only those fields of each item, or of the single
+object. With compact=true (default), environment container/project/image/volume/network lists use the
+same summaries as arcane_run, and a single project drops updateInfoByRef (it repeats serviceUpdates).
+
 The OpenAPI 3.1 spec is at /api/openapi.json. Fetch it, with care because it is large, to find paths.
 Environment-scoped paths look like /api/environments/{id}/projects.
 
 Examples:
 - {"path": "/api/environments"}
 - {"path": "/api/environments/0/projects", "query": {"limit": 5}}
+- {"path": "/api/environments/0/projects", "fields": ["name", "status", "updateInfo.hasUpdate"]}
 - {"path": "/api/openapi.json"}
 """
 
@@ -125,7 +151,8 @@ Examples:
 
 ENV_DESCRIPTION = """\
 List Arcane environments (Docker hosts) as a small payload of {id, name, status}, plus the server's
-default env_id. Call this first and pass the chosen id as `env_id` to arcane_run.
+default env_id. Call this first and pass the chosen id (or the environment's name) as `env_id` to
+arcane_run. An unknown env_id is rejected with the list of known environments.
 
 Example: {}
 """
@@ -177,8 +204,15 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
         annotations=ToolAnnotations(title="Run arcane-cli", destructive_hint=True, open_world_hint=False),
     )
     def arcane_run(args: list[str], env_id: str | None = None, confirm: bool = False,
-                   compact: bool = True, ctx: Context | None = None) -> dict[str, Any]:
-        return as_caller(ctx, lambda: runner.run(args, env_id=env_id, confirm=confirm, compact=compact))
+                   compact: bool = True, allow_self: bool = False, exclude_types: list[str] | None = None,
+                   filter_state: str | None = None, filter_has_update: bool | None = None,
+                   filter_project: str | None = None, name_contains: str | None = None,
+                   ctx: Context | None = None) -> dict[str, Any]:
+        filters = {"state": filter_state, "has_update": filter_has_update, "project": filter_project,
+                   "name_contains": name_contains}
+        return as_caller(ctx, lambda: runner.run(args, env_id=env_id, confirm=confirm, compact=compact,
+                                                 allow_self=allow_self, exclude_types=exclude_types,
+                                                 filters=filters))
 
     @mcp.tool(
         name="arcane_help",
@@ -193,9 +227,9 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
         description=API_DESCRIPTION,
         annotations=ToolAnnotations(title="Arcane API (GET)", read_only_hint=True, open_world_hint=False),
     )
-    def arcane_api_get(path: str, query: dict[str, Any] | None = None,
-                       ctx: Context | None = None) -> dict[str, Any]:
-        return as_caller(ctx, lambda: api.get(path, query))
+    def arcane_api_get(path: str, query: dict[str, Any] | None = None, fields: list[str] | None = None,
+                       compact: bool = True, ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: api.get(path, query, fields=fields, compact=compact))
 
     @mcp.tool(
         name="arcane_project_compose",

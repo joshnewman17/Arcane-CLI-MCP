@@ -62,6 +62,10 @@ class Settings:
     # Cloudflare Access: when both are set, every MCP request must carry a valid Access JWT.
     access_team_domain: str | None = None
     access_aud: str | None = None
+    # The MCP server's own deployment, so mutating commands can't restart it mid-call.
+    self_project: str | None = "arcane-cli-mcp"
+    self_containers: tuple[str, ...] = ("arcane-cli-mcp", "arcane-cli-mcp-tunnel")
+    self_env: str | None = None  # defaults to default_env
 
     @property
     def access_enabled(self) -> bool:
@@ -134,6 +138,11 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         verify_tls=_bool(env.get("ARCANE_VERIFY_TLS"), default=True),
         access_team_domain=team,
         access_aud=aud,
+        self_project=env.get("SELF_PROJECT", "arcane-cli-mcp").strip() or None,
+        self_containers=tuple(
+            c.strip() for c in env.get("SELF_CONTAINERS", "arcane-cli-mcp,arcane-cli-mcp-tunnel").split(",") if c.strip()
+        ),
+        self_env=env.get("SELF_ENV", "").strip() or None,
     )
 
 

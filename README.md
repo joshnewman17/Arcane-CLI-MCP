@@ -20,10 +20,10 @@ Arcane instance (LAN)
 
 | Tool | What it does |
 |---|---|
-| `arcane_run(args, env_id?, confirm=false, compact=true)` | Runs `arcane-cli <args> --env <id> --json`. Policy-checked. Returns `{ok, exit_code, data, stderr_tail, command}`. With `compact=true`, list commands return one short summary per item ([`compact.py`](src/arcane_mcp/compact.py)), so 85 containers come to about 18K characters instead of 197K. |
-| `arcane_help(command=[])` | `arcane-cli <command> --help`, so Claude can discover flags instead of guessing. |
-| `arcane_api_get(path, query?)` | Read-only `GET /api/...` escape hatch for data the CLI doesn't expose. The spec lives at `/api/openapi.json`. |
-| `arcane_environments()` | `{id, name, status}` for each environment, so Claude can pick an `env_id`. |
+| `arcane_run(args, env_id?, confirm=false, compact=true, allow_self=false, exclude_types?, filter_state?, filter_has_update?, filter_project?, name_contains?)` | Runs `arcane-cli <args> --env <id> --json` (`--env` only for environment-scoped commands). Policy-checked. Returns `{ok, exit_code, data, error, stderr_tail, command}`. With `compact=true`, list commands return one short summary per item ([`compact.py`](src/arcane_mcp/compact.py)), so 85 containers come to about 18K characters instead of 197K; `volumes sizes`, `jobs list` and `containers get` are reshaped too, and `activities list` folds repeats. The `filter_*` / `name_contains` parameters filter list items server-side; `exclude_types` drops noisy activity types. `--help` is answered like `arcane_help`. |
+| `arcane_help(command=[])` | `arcane-cli <command> --help`, so Claude can discover flags instead of guessing. Tokens must be subcommand words; unknown subcommands get a warning. |
+| `arcane_api_get(path, query?, fields?, compact=true)` | Read-only `GET /api/...` escape hatch for data the CLI doesn't expose. The spec lives at `/api/openapi.json`. `fields` keeps only the named (dotted) fields; `compact` reuses the list summaries for matching paths. |
+| `arcane_environments()` | `{id, name, status}` for each environment, so Claude can pick an `env_id`. Every tool accepts the environment's id or its name; an unknown one is rejected with the list of known environments (cached for 5 minutes). |
 | `arcane_project_compose(project, compose?, env_id?, confirm=false)` | Reads a project's compose file, or replaces it with the full new content. A write first returns `needs_confirmation` with a diff, and only runs with `confirm=true`. The project's `.env` is never read or written here, and nothing is redeployed. |
 
 ### Safety model (enforced in code: [`policy.py`](src/arcane_mcp/policy.py))
@@ -46,6 +46,12 @@ Arcane instance (LAN)
 - **Read-only mode** (`ARCANE_MCP_READONLY=true`): an explicit allowlist of `list/get/status/updates/
   sizes/usage/history/summary/image/me/test/doctor/version/...` commands, plus `--help`.
   Anything else is denied by default.
+- **Self-protection:** mutating commands aimed at the MCP server's own deployment (`SELF_PROJECT`,
+  `SELF_CONTAINERS`, or its own container id, in `SELF_ENV`) return `{ok:false, self_target:true}` and run
+  nothing, because restarting the server drops the call that asked for it. Covered: `containers
+  update|redeploy|restart|stop|kill|delete|pause|edit`, `projects redeploy|down|up|pull|restart|destroy|upgrade|
+  archive|build`, plus `system containers stop` and `updater run`. They only run with `confirm=true` **and**
+  `allow_self=true`.
 - **Rejected flags:** `--config`/`-c` (the server owns the CLI config), `--env` (use `env_id`), and
   local-file flags (`--file`/`-f`, `--env-file`, `--dockerfile-inline`, ...). Bundled short flags
   (`-yf`) and control characters are rejected too.
@@ -58,8 +64,20 @@ Arcane instance (LAN)
   compose endpoint includes `envContent`, which the redactor withholds.
 - **Secrets:** the API key is written to a `0600` CLI config file on a tmpfs and passed with
   `--config`. The CLI child process gets a minimal environment (no key, no MCP token). All tool
-  output and audit lines go through a redactor that removes the key, the MCP token, and anything
-  shaped like `X-Api-Key:` / `Authorization:` / `apiKey`.
+  output and audit lines go through a redactor ([`audit.py`](src/arcane_mcp/audit.py)) that removes the key,
+  the MCP token, and credentials found by key name or by value, anywhere in the (recursively walked) JSON,
+  in env arrays, labels, `cmd`/`entrypoint` arrays and compose YAML:
+  - secret-named keys and `KEY=value` / `KEY: value` lines (`*_TOKEN`, `*_KEY`, `*_SECRET`, `*_PASSWORD`,
+    `*_PASS`, `*_PWD`, `*_DSN`, ...), and label keys like traefik's `*.basicauth.users`;
+  - URL userinfo in any scheme (`postgresql://user:[REDACTED]@db`, `redis://:[REDACTED]@cache`, `mongodb+srv://...`);
+  - credential query parameters (`?token=`, `password=`, `key=`, `secret=`, `apikey=`, `access_token=`, `sig=`);
+  - `Authorization: Bearer|Basic ...` and `X-Api-Key:`;
+  - token shapes: GitHub `ghp_…`/`github_pat_…`, `sk-…`, AWS `AKIA…`, GitLab `glpat-…`, Slack `xox…`, JWTs,
+    PEM private keys, and htpasswd hashes (`$apr1$`, bcrypt, ...).
+
+  `${VAR}` placeholders are left alone, so compose files stay readable.
+- **Global cleanup:** every response drops `$schema` (it leaks Arcane's internal URL) and `grandTotalItems: 0`,
+  and timestamps are normalised to UTC `YYYY-MM-DDTHH:MM:SSZ`.
 
 Note that `--force` on `containers delete` / `volumes delete` also means "remove even if running or in use".
 Because it's always stripped, Claude has to stop a container before deleting it. That's deliberate.
@@ -91,6 +109,9 @@ takes `--config <path>`. When an `api_key` is set, the CLI ignores saved session
 | `DEFAULT_TIMEOUT_S` / `LONG_TIMEOUT_S` | Normal / streaming-op timeouts | `120` / `1800` |
 | `AUDIT_LOG_PATH` | JSONL audit log (empty disables the file; stdout always gets it) | `/data/audit.log` |
 | `ARCANE_VERIFY_TLS` | TLS verification for `arcane_api_get` | `true` |
+| `SELF_PROJECT` | The MCP server's own Arcane project, protected from restart/stop (empty disables) | `arcane-cli-mcp` |
+| `SELF_CONTAINERS` | Comma-separated container names also protected (e.g. the tunnel sidecar) | `arcane-cli-mcp,arcane-cli-mcp-tunnel` |
+| `SELF_ENV` | Environment the MCP server runs in | `ARCANE_DEFAULT_ENV` |
 | `ARCANE_CLI_PATH` / `ARCANE_MCP_STATE_DIR` | Set by the image; override for local dev | – |
 
 `/healthz` (unauthenticated) runs `arcane-cli doctor --json`, caches the result for 60s, and returns 200 or 503.
@@ -304,6 +325,7 @@ In stdio mode, logs and audit lines go to stderr so stdout stays clean for the p
 | [`arcane-vuln-review`](skills/arcane-vuln-review/SKILL.md) | Prioritise critical/high CVEs, recommend update/accept/ignore |
 | [`arcane-disk-cleanup`](skills/arcane-disk-cleanup/SKILL.md) | Measure volumes/images before pruning anything |
 | [`arcane-gitops`](skills/arcane-gitops/SKILL.md) | Inspect and trigger GitOps syncs, follow the activity to completion |
+| [`arcane-health-check`](skills/arcane-health-check/SKILL.md) | One read-only pass: environments, failed activities/jobs (no noise), unhealthy containers, pending updates. Good as a scheduled morning check |
 | [`arcane-github-deploy`](skills/arcane-github-deploy/SKILL.md) | Deploy a GitHub repo as a regular Arcane project: CI builds to GHCR, Arcane pulls. Includes templates and GHCR `denied` troubleshooting |
 
 To install them: in claude.ai, upload each folder as a zip under **Settings → Capabilities → Skills**.
@@ -320,7 +342,7 @@ Every tool call is one JSON line on stdout and in `/data/audit.log`:
 {"ts":"2026-10-22T03:52:32.589+00:00","tool":"arcane_run","argv":["projects","destroy","foo","--env","0","--json"],"env_id":"0","confirm":false,"outcome":"needs_confirmation","exit_code":null,"duration_ms":0}
 ```
 
-`outcome` is one of `ok`, `error`, `blocked`, `rejected` or `needs_confirmation`. The log isn't rotated,
+`outcome` is one of `ok`, `error`, `blocked`, `rejected`, `needs_confirmation` or `self_target`. The log isn't rotated,
 so rotate it with logrotate or the Unraid CA tooling if it grows.
 
 ## Development and testing

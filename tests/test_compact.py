@@ -122,7 +122,7 @@ def test_volume_network_activity_vuln_projections():
     assert v["id"] == "CVE-1" and v["cvss"] == 7.5 and len(v["title"]) == 120 and "description" not in v
 
 
-@pytest.mark.parametrize("path", [("containers", "get"), ("doctor",), ("system", "info")])
+@pytest.mark.parametrize("path", [("networks", "get"), ("doctor",), ("system", "info")])
 def test_unknown_commands_untouched(path):
     data = wrap([{"a": 1}])
     assert c.compact(path, data) == (data, False)

@@ -172,6 +172,23 @@ LONG_RUNNING: frozenset[Path] = frozenset(
     )
 )
 
+# Commands that stop, restart or recreate their target. Aimed at the MCP server's own project or
+# containers they would kill the server mid-call, so they need confirm=true AND allow_self=true.
+SELF_MUTATING: frozenset[Path] = frozenset(
+    _p(s)
+    for s in (
+        "containers update", "containers redeploy", "containers restart", "containers stop", "containers kill",
+        "containers delete", "containers pause", "containers edit",
+        "projects redeploy", "projects down", "projects up", "projects pull", "projects restart",
+        "projects destroy", "projects upgrade", "projects archive", "projects build",
+    )
+)
+# Environment-wide commands that would also take the MCP server down with everything else.
+SELF_MUTATING_ALL: frozenset[Path] = frozenset({_p("system containers stop"), _p("updater run")})
+
+# Command groups that don't take `--env` (everything else is environment-scoped).
+NON_ENV_GROUPS = frozenset({"auth", "config", "version", "completion", "self-update", "generate", "doctor", "help"})
+
 # Every command path in arcane-cli v2.17.0.
 # Used to work out where the command path ends and positional arguments begin.
 KNOWN_COMMANDS: frozenset[Path] = frozenset(
@@ -293,6 +310,7 @@ class PolicyResult:
     reason: str = ""
     stripped: list[str] = field(default_factory=list)
     long_running: bool = False
+    help: bool = False
 
 
 class PolicyError(ValueError):
@@ -317,6 +335,16 @@ def command_path(args: list[str]) -> Path:
     if not best:
         best = tuple(words[:2])
     return best
+
+
+def env_scoped(path: Path) -> bool:
+    """Whether the command takes `--env` (see NON_ENV_GROUPS)."""
+    return bool(path) and path[0] not in NON_ENV_GROUPS
+
+
+def positionals(args: list[str], path: Path) -> list[str]:
+    """Non-flag words after the command path (targets such as container or project names)."""
+    return [a for a in args[len(path):] if not a.startswith("-")]
 
 
 def _flag_name(token: str) -> str:
@@ -402,7 +430,7 @@ def evaluate(args: list[str], *, confirm: bool, readonly: bool) -> PolicyResult:
     long_running = path in LONG_RUNNING
 
     def result(decision: Decision, reason: str = "") -> PolicyResult:
-        return PolicyResult(decision, path, clean, reason, stripped, long_running)
+        return PolicyResult(decision, path, clean, reason, stripped, long_running, is_help)
 
     is_help = _has_flag(clean, ("--help", "-h"))
 

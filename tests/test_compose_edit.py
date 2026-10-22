@@ -34,6 +34,8 @@ class FakeCli:
     def __call__(self, argv, **kw):
         args = argv[4:]
         self.calls.append(args)
+        if args[:2] == ["environments", "list"]:
+            return SimpleNamespace(returncode=0, stderr="", stdout=json.dumps({"data": [{"id": "0", "name": "local"}]}))
         if args[:2] == ["projects", "get"]:
             if args[2] == "missing":
                 return SimpleNamespace(returncode=1, stdout="", stderr="Error\nproject not found")
