@@ -10,6 +10,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from . import compact as compact_mod
 from . import policy
 from .audit import AuditLog, Redactor
 from .config import Settings
@@ -148,7 +149,8 @@ class CliRunner:
 
     # -- tools -----------------------------------------------------------------
 
-    def run(self, args: list[str], env_id: str | None = None, confirm: bool = False) -> dict[str, Any]:
+    def run(self, args: list[str], env_id: str | None = None, confirm: bool = False,
+            compact: bool = True) -> dict[str, Any]:
         started = time.monotonic()
         audit: dict[str, Any] = {"tool": "arcane_run", "argv": list(args) if isinstance(args, list) else args,
                                  "env_id": env_id, "confirm": confirm}
@@ -192,7 +194,7 @@ class CliRunner:
         duration_ms = int((time.monotonic() - started) * 1000)
         stdout = self.redactor.text(stdout)
         stderr = self.redactor.text(stderr)
-        result = self._shape(base, code, stdout, stderr)
+        result = self._shape(base, code, stdout, stderr, decision.command_path if compact else None)
         if timed_out:
             result.update(ok=False, timed_out=True,
                           error=f"Timed out after {timeout}s. The operation may still be running in Arcane; "
@@ -201,11 +203,16 @@ class CliRunner:
                           duration_ms=duration_ms, timeout_s=timeout)
         return result
 
-    def _shape(self, base: dict[str, Any], code: int | None, stdout: str, stderr: str) -> dict[str, Any]:
+    def _shape(self, base: dict[str, Any], code: int | None, stdout: str, stderr: str,
+               compact_path: policy.Path | None = None) -> dict[str, Any]:
         limit = self.settings.max_output_chars
         result: dict[str, Any] = {**base, "ok": code == 0, "exit_code": code}
         parsed, data = parse_json(stdout)
         if parsed:
+            if compact_path is not None:
+                data, compacted = compact_mod.compact(compact_path, data)
+                if compacted:
+                    result["compact"] = True
             data, note = fit_output(data, limit)
             result["data"] = data
         else:
@@ -247,7 +254,7 @@ class CliRunner:
         return out
 
     def environments(self) -> dict[str, Any]:
-        result = self.run(["environments", "list", "--all"])
+        result = self.run(["environments", "list", "--all"], compact=False)
         if not result.get("ok"):
             return result
         payload = result.get("data")

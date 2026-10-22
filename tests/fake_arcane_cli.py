@@ -39,7 +39,8 @@ if cmd == "environments list":
 elif cmd == "doctor":
     print(json.dumps({"healthy": True, "checks": [{"name": "api_connection", "status": "ok"}]}))
 elif cmd == "containers list":
-    print(json.dumps({"success": True, "data": [{"id": f"c{i}", "name": f"svc-{i}", "state": "running"}
+    print(json.dumps({"success": True, "data": [{"id": f"c{i}", "names": [f"/svc-{i}"], "state": "running",
+                                                 "labels": {f"label.{n}": "x" * 40 for n in range(5)}}
                                                 for i in range(500)], "pagination": {"totalItems": 500}}))
 elif cmd == "projects redeploy":
     print(json.dumps([{"status": f"step {i}"} for i in range(5)] + [{"status": "done"}]))

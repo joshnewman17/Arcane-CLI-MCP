@@ -64,10 +64,13 @@ async def test_environments(e2e):
     assert argv[argv.index("--config") + 1] == str(settings.cli_config_path)
 
 
-async def test_list_containers_truncated(e2e):
+async def test_list_containers_compact_and_truncated(e2e):
     _, server = e2e
+    full = await call(server, "arcane_run", {"args": ["containers", "list", "--all"], "compact": False})
+    assert full["ok"] and full["truncated"] and full["data"]["data"][0]["names"] == ["/svc-0"]
     r = await call(server, "arcane_run", {"args": ["containers", "list", "--all"]})
-    assert r["ok"] and r["truncated"] and r["data"]["data"][0]["name"] == "svc-0"
+    assert r["ok"] and r["compact"] and r["data"]["data"][0] == {"id": "c0", "name": "svc-0", "state": "running"}
+    assert len(r["data"]["data"]) > len(full["data"]["data"])
 
 
 async def test_destroy_needs_confirmation_and_changes_nothing(e2e):

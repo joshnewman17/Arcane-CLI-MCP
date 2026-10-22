@@ -20,7 +20,7 @@ Arcane instance (LAN)
 
 | Tool | What it does |
 |---|---|
-| `arcane_run(args, env_id?, confirm=false)` | Runs `arcane-cli <args> --env <id> --json`. Policy-checked. Returns `{ok, exit_code, data, stderr_tail, command}`. |
+| `arcane_run(args, env_id?, confirm=false, compact=true)` | Runs `arcane-cli <args> --env <id> --json`. Policy-checked. Returns `{ok, exit_code, data, stderr_tail, command}`. With `compact=true`, list commands return one short summary per item ([`compact.py`](src/arcane_mcp/compact.py)), so 85 containers come to about 18K characters instead of 197K. |
 | `arcane_help(command=[])` | `arcane-cli <command> --help`, so Claude can discover flags instead of guessing. |
 | `arcane_api_get(path, query?)` | Read-only `GET /api/...` escape hatch for data the CLI doesn't expose. The spec lives at `/api/openapi.json`. |
 | `arcane_environments()` | `{id, name, status}` for each environment, so Claude can pick an `env_id`. |

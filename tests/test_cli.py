@@ -240,7 +240,7 @@ def test_fit_output_small_untouched():
 def test_truncation_reported(runner, fake_run, tmp_path):
     big = {"data": [{"i": i, "pad": "p" * 100} for i in range(2000)], "pagination": {}}
     fake_run(stdout=json.dumps(big))
-    r = runner.run(["containers", "list", "--all"])
+    r = runner.run(["containers", "list", "--all"], compact=False)
     assert r["truncated"] is True and "showing" in r["truncation_note"]
     assert len(json.dumps(r["data"], separators=(",", ":"))) <= runner.settings.max_output_chars
 

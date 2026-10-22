@@ -50,6 +50,10 @@ you pass is stripped. Use `env_id` instead of `--env`. Flags that read local fil
 
 Result: {ok, exit_code, data, stderr_tail, command}. List commands return {data, pagination};
 use --limit/--start or filters when output is truncated (`--all` cannot be combined with --limit).
+With compact=true (default), list commands for containers, projects, images, volumes, networks,
+activities and vulnerabilities return one short summary per item (name, image, state, health,
+project, ports, hasUpdate, ...) and the result has compact=true. Pass compact=false for the full
+objects, or use the matching `get` command for one item.
 Streaming commands (projects up/redeploy/pull/build, images pull/build, containers update) can take
 up to 30 minutes and return an array of progress frames when done.
 
@@ -129,8 +133,9 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
         description=RUN_DESCRIPTION,
         annotations=ToolAnnotations(title="Run arcane-cli", destructive_hint=True, open_world_hint=False),
     )
-    def arcane_run(args: list[str], env_id: str | None = None, confirm: bool = False) -> dict[str, Any]:
-        return runner.run(args, env_id=env_id, confirm=confirm)
+    def arcane_run(args: list[str], env_id: str | None = None, confirm: bool = False,
+                   compact: bool = True) -> dict[str, Any]:
+        return runner.run(args, env_id=env_id, confirm=confirm, compact=compact)
 
     @mcp.tool(
         name="arcane_help",
