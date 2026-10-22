@@ -158,7 +158,7 @@ def test_missing_project(setup):
 
 def test_arcane_run_still_rejects_file_flags(setup):
     editor, fake, _, _ = setup()
-    r = editor.runner.run(["projects", "update", "app", "-f", "/tmp/arcane-mcp/arcanecli.yml"])
+    r = editor.runner.run(["projects", "update", "app", "-f", "/tmp/arcane-cli-mcp/arcanecli.yml"])
     assert r["ok"] is False and "filesystem" in r["error"] and fake.calls == []
 
 

@@ -66,7 +66,7 @@ def test_readme_project_compose_parses():
     block = re.search(r"```yaml\n(.*?)```", section, re.S).group(1)
     compose = yaml.safe_load(re.sub(r"(?m)^   ", "", block))
     service, tunnel = compose["services"]["arcane-cli-mcp"], compose["services"]["cloudflared"]
-    assert service["image"] == "ghcr.io/joshnewman17/arcane-mcp:latest"
+    assert service["image"] == "ghcr.io/joshnewman17/arcane-cli-mcp:latest"
     assert service["read_only"] is True and "build" not in service
     # DMZ pattern: static IPs on br0.14, nothing published, Access mode on.
     assert "ports" not in service and "ports" not in tunnel

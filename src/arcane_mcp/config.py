@@ -56,7 +56,7 @@ class Settings:
     default_timeout_s: int = 120
     long_timeout_s: int = 1800
     cli_path: str = "arcane-cli"
-    state_dir: Path = Path(tempfile.gettempdir()) / "arcane-mcp"
+    state_dir: Path = Path(tempfile.gettempdir()) / "arcane-cli-mcp"
     audit_log_path: Path | None = Path("/data/audit.log")
     verify_tls: bool = True
     # Cloudflare Access: when both are set, every MCP request must carry a valid Access JWT.
@@ -129,7 +129,7 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         default_timeout_s=_int("DEFAULT_TIMEOUT_S", env.get("DEFAULT_TIMEOUT_S"), 120),
         long_timeout_s=_int("LONG_TIMEOUT_S", env.get("LONG_TIMEOUT_S"), 1800),
         cli_path=cli_path,
-        state_dir=Path(env.get("ARCANE_MCP_STATE_DIR", "").strip() or Path(tempfile.gettempdir()) / "arcane-mcp"),
+        state_dir=Path(env.get("ARCANE_MCP_STATE_DIR", "").strip() or Path(tempfile.gettempdir()) / "arcane-cli-mcp"),
         audit_log_path=Path(audit) if audit else None,
         verify_tls=_bool(env.get("ARCANE_VERIFY_TLS"), default=True),
         access_team_domain=team,

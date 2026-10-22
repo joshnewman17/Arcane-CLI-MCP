@@ -32,7 +32,7 @@ log = logging.getLogger("arcane_mcp")
 
 HEALTH_CACHE_S = 60
 # Set by AuthMiddleware after the Access JWT is verified; any client-supplied copy is stripped first.
-USER_HEADER = "x-arcane-mcp-user"
+USER_HEADER = "x-arcane-cli-mcp-user"
 T = TypeVar("T")
 
 INSTRUCTIONS = """\
@@ -156,7 +156,7 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     health = HealthCache(runner)
     compose_editor = ComposeEditor(runner, api, redactor, audit)
 
-    mcp = MCPServer(name="arcane-mcp", version=__version__, instructions=INSTRUCTIONS)
+    mcp = MCPServer(name="arcane-cli-mcp", version=__version__, instructions=INSTRUCTIONS)
 
     def as_caller(ctx: Context | None, fn: Callable[[], T]) -> T:
         """Run ``fn`` with the verified caller (if any) attached to its audit records."""
@@ -274,7 +274,7 @@ class AuthMiddleware:
         elif self._token is not None:
             scheme, _, value = lookup.get(b"authorization", b"").partition(b" ")
             if scheme.lower() != b"bearer" or not hmac.compare_digest(value.strip(), self._token):
-                await _deny(send, 401, b'Bearer realm="arcane-mcp"')
+                await _deny(send, 401, b'Bearer realm="arcane-cli-mcp"')
                 return
 
         await self.app({**scope, "headers": headers}, receive, send)
@@ -291,7 +291,7 @@ def http_app(settings: Settings, mcp: MCPServer, path: str = "/mcp",
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="arcane-mcp", description="MCP server for Arcane via arcane-cli")
+    parser = argparse.ArgumentParser(prog="arcane-cli-mcp", description="MCP server for Arcane via arcane-cli")
     parser.add_argument("--transport", choices=["http", "stdio"], default="http")
     parser.add_argument("--path", default=None, help="HTTP path for the MCP endpoint (default: $MCP_PATH or /mcp)")
     opts = parser.parse_args(argv)
@@ -324,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         log.warning("MCP_AUTH_TOKEN is not set: anyone who can reach port %s can control Docker", settings.port)
         log.warning("through Arcane. Set MCP_AUTH_TOKEN, or CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD.")
         log.warning("=" * 72)
-    log.info("arcane-mcp %s listening on %s:%s%s (readonly=%s, cli=%s)", __version__, settings.host,
+    log.info("arcane-cli-mcp %s listening on %s:%s%s (readonly=%s, cli=%s)", __version__, settings.host,
              settings.port, "/<path>" if path != "/mcp" else path, settings.readonly, settings.cli_path)
     mcp = build_server(settings)
     uvicorn.run(http_app(settings, mcp, path), host=settings.host, port=settings.port,

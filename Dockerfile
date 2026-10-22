@@ -39,7 +39,7 @@ ARG ARCANE_CLI_VERSION=2.17.0
 ARG PUID=99
 ARG PGID=100
 
-LABEL org.opencontainers.image.title="arcane-mcp" \
+LABEL org.opencontainers.image.title="arcane-cli-mcp" \
       org.opencontainers.image.description="Remote MCP server for Arcane, wrapping arcane-cli" \
       io.getarcane.cli.version="${ARCANE_CLI_VERSION}"
 
@@ -60,7 +60,7 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     ARCANE_CLI_PATH=/usr/local/bin/arcane-cli \
-    ARCANE_MCP_STATE_DIR=/tmp/arcane-mcp \
+    ARCANE_MCP_STATE_DIR=/tmp/arcane-cli-mcp \
     AUDIT_LOG_PATH=/data/audit.log \
     MCP_HOST=0.0.0.0 \
     MCP_PORT=8080
@@ -72,5 +72,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=60s --timeout=40s --start-period=20s --retries=3 \
   CMD ["python", "-c", "import os,sys,urllib.request; sys.exit(0 if urllib.request.urlopen(f\"http://127.0.0.1:{os.environ.get('MCP_PORT','8080')}/healthz\", timeout=35).status == 200 else 1)"]
 
-ENTRYPOINT ["arcane-mcp"]
+ENTRYPOINT ["arcane-cli-mcp"]
 CMD ["--transport", "http"]

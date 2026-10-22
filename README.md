@@ -1,4 +1,4 @@
-# arcane-mcp
+# arcane-cli-mcp
 
 A small, self-hosted **remote MCP server** that lets Claude manage a Docker homelab through
 [Arcane](https://getarcane.app). It wraps the official `arcane-cli` (pinned and baked into the
@@ -9,7 +9,7 @@ safe operational workflows live in [skills](#skills).
 Claude (claude.ai connector / Claude Code)
    │  MCP over Streamable HTTP (or stdio)
    ▼
-arcane-mcp container ── Python MCP server ── policy table ── subprocess (argv list, no shell)
+arcane-cli-mcp container ── Python MCP server ── policy table ── subprocess (argv list, no shell)
    │                                                         └─ arcane-cli v2.17.0
    │  HTTP(S) + X-Api-Key
    ▼
@@ -70,8 +70,8 @@ The arcane-cli has **no documented environment variables** for the server URL or
 ([config docs](https://getarcane.app/docs/reference/cli/config)). It reads a YAML file
 (`~/.config/arcanecli.yml` by default) with `server_url`, `api_key` and `default_environment`, and
 takes `--config <path>`. When an `api_key` is set, the CLI ignores saved sessions and sends it as
-`X-Api-Key`. At startup, arcane-mcp writes `$ARCANE_MCP_STATE_DIR/arcanecli.yml` (default
-`/tmp/arcane-mcp`, a tmpfs in the compose file) from `ARCANE_URL` / `ARCANE_API_KEY` and passes
+`X-Api-Key`. At startup, arcane-cli-mcp writes `$ARCANE_MCP_STATE_DIR/arcanecli.yml` (default
+`/tmp/arcane-cli-mcp`, a tmpfs in the compose file) from `ARCANE_URL` / `ARCANE_API_KEY` and passes
 `--config` on every call.
 
 ## Configuration
@@ -113,11 +113,11 @@ Don't give Claude an admin key.
    own machine (it's deliberately blocked through MCP):
 
    ```bash
-   arcane-cli admin api-keys create claude-mcp --description "arcane-mcp" -p <resource:action> -p <resource:action:envId>
+   arcane-cli admin api-keys create claude-mcp --description "arcane-cli-mcp" -p <resource:action> -p <resource:action:envId>
    ```
 
    Run `arcane-cli admin api-keys create --help` and `arcane-cli admin roles permissions` to see the available permission names.
-4. Check it: `ARCANE_URL=... ARCANE_API_KEY=... arcane-mcp --transport stdio` and call `arcane_run`
+4. Check it: `ARCANE_URL=... ARCANE_API_KEY=... arcane-cli-mcp --transport stdio` and call `arcane_run`
    with `["auth","me"]`, or just watch `/healthz` after starting the container.
 
 The Arcane role is the real security boundary. This server's policy layer is defence in depth on top of it.
@@ -154,10 +154,10 @@ Either use the compose file with the Compose Manager plugin, or add a container 
 
 | Field | Value |
 |---|---|
-| Repository | `arcane-mcp:latest` (build it on the server: `docker build -t arcane-mcp:latest .` from a clone in `/mnt/user/appdata/arcane-mcp-src`), or your registry image |
+| Repository | `arcane-cli-mcp:latest` (build it on the server: `docker build -t arcane-cli-mcp:latest .` from a clone in `/mnt/user/appdata/arcane-cli-mcp-src`), or your registry image |
 | Network | `bridge` (or the custom network Arcane is on) |
 | Port | container `8080` → host `8080` (or any free port) |
-| Path | container `/data` → host `/mnt/user/appdata/arcane-mcp` (audit log) |
+| Path | container `/data` → host `/mnt/user/appdata/arcane-cli-mcp` (audit log) |
 | Variables | `ARCANE_URL`, `ARCANE_API_KEY`, `MCP_AUTH_TOKEN`, optionally `ARCANE_DEFAULT_ENV`, `ARCANE_MCP_READONLY` |
 | Extra parameters | `--read-only --tmpfs /tmp:mode=1777,size=16m --cap-drop ALL --security-opt no-new-privileges:true` |
 
@@ -169,7 +169,7 @@ share a custom network).
 ## 3b. Deploy as an Arcane project
 
 GitHub Actions ([`.github/workflows/image.yml`](.github/workflows/image.yml)) runs the tests and pushes
-`ghcr.io/joshnewman17/arcane-mcp:latest` (amd64 + arm64) on every push to `main`. Arcane pulls that
+`ghcr.io/joshnewman17/arcane-cli-mcp:latest` (amd64 + arm64) on every push to `main`. Arcane pulls that
 image, so nothing is built on the host.
 
 1. **Registry access:** under **Customization → Container Registries → ghcr.io**, the token must be a
@@ -183,7 +183,7 @@ image, so nothing is built on the host.
    ```yaml
    services:
      arcane-cli-mcp:
-       image: ghcr.io/joshnewman17/arcane-mcp:latest
+       image: ghcr.io/joshnewman17/arcane-cli-mcp:latest
        container_name: arcane-cli-mcp
        restart: unless-stopped
        dns: [192.168.14.1]
@@ -242,10 +242,10 @@ image, so nothing is built on the host.
    ```
 
    Each value goes only to the container that needs it, so the tunnel token never reaches the MCP server.
-   (`projects create -f` is blocked through arcane-mcp because it reads a local file, so this step happens in the UI.)
+   (`projects create -f` is blocked through arcane-cli-mcp because it reads a local file, so this step happens in the UI.)
 3. **OPNsense:** a pass rule on the DMZ interface: `192.168.14.18/32` → `10.1.21.104/32` TCP `3552`, placed
    above any DMZ → private-network block rule.
-4. Start it, through arcane-mcp or the UI: `projects up arcane-cli-mcp`. The container's healthcheck runs
+4. Start it, through arcane-cli-mcp or the UI: `projects up arcane-cli-mcp`. The container's healthcheck runs
    `arcane-cli doctor` against Arcane.
 5. **Updates:** after CI publishes a new image, run `projects redeploy arcane-cli-mcp`, which pulls `:latest`
    and recreates the container. Arcane's image-update checks also flag it, and auto-update can pick it up
@@ -288,7 +288,7 @@ claude mcp add --transport http arcane https://mcp.example.com/mcp --header "Aut
 Or over stdio from a checkout (needs `arcane-cli` on PATH):
 
 ```bash
-claude mcp add arcane --env ARCANE_URL=http://192.168.1.10:3552 --env ARCANE_API_KEY=arc_... --env AUDIT_LOG_PATH=./audit.log -- uv run --directory /path/to/arcane-mcp arcane-mcp --transport stdio
+claude mcp add arcane --env ARCANE_URL=http://192.168.1.10:3552 --env ARCANE_API_KEY=arc_... --env AUDIT_LOG_PATH=./audit.log -- uv run --directory /path/to/arcane-cli-mcp arcane-cli-mcp --transport stdio
 ```
 
 In stdio mode, logs and audit lines go to stderr so stdout stays clean for the protocol.
@@ -350,10 +350,10 @@ ARCANE_IT=1 ARCANE_URL=http://192.168.1.10:3552 ARCANE_API_KEY=arc_... .venv/bin
 stdio:
 
 ```bash
-npx @modelcontextprotocol/inspector -e ARCANE_URL=http://192.168.1.10:3552 -e ARCANE_API_KEY=arc_... -e AUDIT_LOG_PATH=./audit.log .venv/bin/arcane-mcp --transport stdio
+npx @modelcontextprotocol/inspector -e ARCANE_URL=http://192.168.1.10:3552 -e ARCANE_API_KEY=arc_... -e AUDIT_LOG_PATH=./audit.log .venv/bin/arcane-cli-mcp --transport stdio
 ```
 
-HTTP: start the container (or `.venv/bin/arcane-mcp`), run `npx @modelcontextprotocol/inspector`,
+HTTP: start the container (or `.venv/bin/arcane-cli-mcp`), run `npx @modelcontextprotocol/inspector`,
 choose **Streamable HTTP**, URL `http://localhost:8080/mcp`, and add the header
 `Authorization: Bearer <MCP_AUTH_TOKEN>`.
 
@@ -373,7 +373,7 @@ away in v3). To upgrade:
    and anything that reads a local file, whether as a flag or a positional argument (block it).
 4. Update `policy.py` and the tests, run `pytest`, then push. CI publishes the image, and Arcane picks it up.
 
-Also check the scan in Arcane afterwards (`images vulnerabilities image ghcr.io/joshnewman17/arcane-mcp:latest`).
+Also check the scan in Arcane afterwards (`images vulnerabilities image ghcr.io/joshnewman17/arcane-cli-mcp:latest`).
 CLI releases are the usual fix for Go standard-library CVEs, since each release is built with a newer Go.
 
 The image downloads the release tarball (`arcane-cli_linux_<arch>.tar.gz`) directly rather than

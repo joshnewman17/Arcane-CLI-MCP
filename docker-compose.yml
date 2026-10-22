@@ -1,11 +1,11 @@
 services:
-  arcane-mcp:
+  arcane-cli-mcp:
     build:
       context: .
       args:
         ARCANE_CLI_VERSION: "2.17.0"
-    image: arcane-mcp:local
-    container_name: arcane-mcp
+    image: arcane-cli-mcp:local
+    container_name: arcane-cli-mcp
     restart: unless-stopped
     env_file: .env
     ports:

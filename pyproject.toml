@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "arcane-mcp"
+name = "arcane-cli-mcp"
 version = "0.1.0"
 description = "Remote MCP server for managing Docker through Arcane, by wrapping arcane-cli"
 readme = "README.md"
@@ -22,6 +22,8 @@ dependencies = [
 dev = ["pytest>=8", "pytest-asyncio>=0.24"]
 
 [project.scripts]
+arcane-cli-mcp = "arcane_mcp.server:main"
+# Old name, kept so existing `claude mcp add ... arcane-mcp` setups keep working.
 arcane-mcp = "arcane_mcp.server:main"
 
 [tool.hatch.build.targets.wheel]

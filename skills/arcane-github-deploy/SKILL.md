@@ -5,7 +5,7 @@ description: Deploy a GitHub repository to an Arcane environment as a regular co
 
 # Deploy a GitHub repo through Arcane (CI + GHCR)
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_project_compose`, `arcane_help`, `arcane_api_get` (arcane-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_project_compose`, `arcane_help`, `arcane_api_get` (arcane-cli-mcp server).
 Templates: `templates/` next to this file.
 
 This pattern has GitHub Actions build the image and push it to GHCR. The project is a normal Arcane
@@ -34,7 +34,7 @@ Fill in `templates/compose.yaml`:
 Show the user the final compose file and the list of `.env` keys they need. Values stay with them.
 
 ## Phase 3: Arcane setup (user does this in the UI; tell them exactly what to do)
-`projects create -f <file>` is blocked through arcane-mcp because it reads a local file, and registry
+`projects create -f <file>` is blocked through arcane-cli-mcp because it reads a local file, and registry
 credentials shouldn't pass through you. So these steps happen in the UI:
 
 1. **Customization → Container Registries → ghcr.io** (only needed for private images). This must be a **classic** PAT with **`read:packages`**:
@@ -48,7 +48,7 @@ credentials shouldn't pass through you. So these steps happen in the UI:
    Creating a project needs the UI. After that, compose changes can go through `arcane_project_compose`
    (diff → user approval → `confirm=true`), while the `.env` always stays in the UI.
 
-## Phase 4: Deploy (through arcane-mcp)
+## Phase 4: Deploy (through arcane-cli-mcp)
 1. Check the project exists: `["projects", "get", "<project>"]` (status `stopped`, `serviceCount` as expected).
 2. Verify registry access before starting: `["images", "pull", "ghcr.io/<owner>/<repo>:latest"]`. It should finish with the digest from the CI run.
 3. Start the project: `["projects", "up", "<project>"]`. The progress frames should end with `Container <name> Healthy` (if the image has a healthcheck) and `{"done": true}`.
@@ -69,7 +69,7 @@ credentials shouldn't pass through you. So these steps happen in the UI:
 - After an update, `["images", "prune", "--dangling"]` (needs confirm) removes the replaced image. Show its scope first, because it also removes other services' unused untagged images.
 
 ## Troubleshooting `denied` on pull
-- `Error response from daemon: denied` comes from **GHCR**, not Arcane. If the arcane-mcp key lacked an Arcane permission, Arcane would answer 403 before contacting the registry.
+- `Error response from daemon: denied` comes from **GHCR**, not Arcane. If the arcane-cli-mcp key lacked an Arcane permission, Arcane would answer 403 before contacting the registry.
 - Arcane automatically uses the stored registry credential for any `ghcr.io/...` pull, CLI and API included. To see what it sent, read Arcane's own container logs:
   find the Arcane container in `["containers", "list", "--all"]`, then
   `arcane_api_get {"path": "/api/environments/<env>/containers/<arcane-container-id>/logs/download"}`

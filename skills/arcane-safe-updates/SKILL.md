@@ -5,7 +5,7 @@ description: Check Docker containers managed by Arcane for newer images and upda
 
 # Safe container updates with Arcane
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help` (arcane-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_help` (arcane-cli-mcp server).
 
 ## Ground rules
 - If more than one environment might exist, call `arcane_environments` first, confirm which one with the user, and pass `env_id` on every call.
