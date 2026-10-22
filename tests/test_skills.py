@@ -57,3 +57,13 @@ def test_template_matches_this_repos_workflow():
     ours = yaml.safe_load((ROOT / ".github" / "workflows" / "image.yml").read_text())
     template = yaml.safe_load((ROOT / "skills" / "arcane-github-deploy" / "templates" / "github-workflow.yml").read_text())
     assert ours["jobs"]["image"] == template["jobs"]["image"]
+
+
+def test_readme_project_compose_parses():
+    # The compose file README section 3b tells the user to paste into Arcane.
+    readme = (ROOT / "README.md").read_text()
+    section = readme[readme.index("## 3b. Deploy as an Arcane project"):readme.index("## 4. Connect Claude")]
+    block = re.search(r"```yaml\n(.*?)```", section, re.S).group(1)
+    service = yaml.safe_load(re.sub(r"(?m)^   ", "", block))["services"]["arcane-cli-mcp"]
+    assert service["image"] == "ghcr.io/joshnewman17/arcane-mcp:latest"
+    assert service["env_file"] == ".env" and service["read_only"] is True and "build" not in service

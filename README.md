@@ -157,20 +157,47 @@ The image runs as `99:100` (`nobody:users`), so appdata permissions work as usua
 box, `ARCANE_URL` is usually `http://<unraid-ip>:3552` (or the container name if both containers
 share a custom network).
 
-## 3b. Deploy through Arcane itself (GitOps)
+## 3b. Deploy as an Arcane project
 
-[`deploy/arcane/compose.yaml`](deploy/arcane/compose.yaml) is meant for an Arcane **Git Sync (pull)**.
 GitHub Actions ([`.github/workflows/image.yml`](.github/workflows/image.yml)) runs the tests and pushes
-`ghcr.io/joshnewman17/arcane-mcp:latest` (amd64 + arm64) on every push to `main`. Arcane then only pulls
-the image, so nothing is built on the host.
+`ghcr.io/joshnewman17/arcane-mcp:latest` (amd64 + arm64) on every push to `main`. Arcane pulls that
+image, so nothing is built on the host.
 
-1. In Arcane, under **Customization → Git Repositories**, add this repo (HTTP auth with a token that can read it).
-   Make sure the `ghcr.io` registry credential in Arcane can read this repo's package.
-2. Create the sync, either in the UI or through arcane-mcp:
-   `gitops create --name arcane-cli-mcp --project-name arcane-cli-mcp --repo-id <id> --branch main --compose-path deploy/arcane/compose.yaml --auto-sync --interval 5`
-3. In the project's **.env** in Arcane, set `ARCANE_URL`, `ARCANE_API_KEY` and `MCP_AUTH_TOKEN`.
-   Non-secret defaults come from [`deploy/arcane/.env.git`](deploy/arcane/.env.git).
-4. Start the project (`projects up arcane-cli-mcp`) and check `http://<host>:8090/healthz`.
+1. **Registry access:** under **Customization → Container Registries → ghcr.io**, the token must be a
+   **classic** PAT with **`read:packages`**. GHCR doesn't accept fine-grained tokens, and a token with
+   only `repo` passes Arcane's Test button but every private pull fails with `denied`.
+2. **Create the project** in the Arcane UI (**Projects → Create**), named `arcane-cli-mcp`, with this compose file:
+
+   ```yaml
+   services:
+     arcane-cli-mcp:
+       image: ghcr.io/joshnewman17/arcane-mcp:latest
+       container_name: arcane-cli-mcp
+       restart: unless-stopped
+       env_file: .env
+       environment:
+         AUDIT_LOG_PATH: /data/audit.log
+       ports:
+         - "${MCP_HOST_PORT:-8090}:8080"
+       volumes:
+         - data:/data
+       tmpfs:
+         - /tmp:mode=1777,size=16m
+       read_only: true
+       security_opt:
+         - no-new-privileges:true
+       cap_drop:
+         - ALL
+   volumes:
+     data:
+   ```
+
+   Then set `ARCANE_URL`, `ARCANE_API_KEY` and `MCP_AUTH_TOKEN` in its **.env**.
+   (`projects create -f` is blocked through arcane-mcp because it reads a local file, so this step happens in the UI.)
+3. Start it, through arcane-mcp or the UI: `projects up arcane-cli-mcp`. Check `http://<host>:8090/healthz`.
+4. **Updates:** after CI publishes a new image, run `projects redeploy arcane-cli-mcp`, which pulls `:latest`
+   and recreates the container. Arcane's image-update checks also flag it, and auto-update can pick it up
+   if you've enabled it for the container.
 
 ## 4. Connect Claude
 
@@ -217,7 +244,7 @@ In stdio mode, logs and audit lines go to stderr so stdout stays clean for the p
 | [`arcane-vuln-review`](skills/arcane-vuln-review/SKILL.md) | Prioritise critical/high CVEs, recommend update/accept/ignore |
 | [`arcane-disk-cleanup`](skills/arcane-disk-cleanup/SKILL.md) | Measure volumes/images before pruning anything |
 | [`arcane-gitops`](skills/arcane-gitops/SKILL.md) | Inspect and trigger GitOps syncs, follow the activity to completion |
-| [`arcane-github-deploy`](skills/arcane-github-deploy/SKILL.md) | Deploy a GitHub repo as a GitOps-synced project: CI builds to GHCR, Arcane pulls. Includes templates and GHCR `denied` troubleshooting |
+| [`arcane-github-deploy`](skills/arcane-github-deploy/SKILL.md) | Deploy a GitHub repo as a regular Arcane project: CI builds to GHCR, Arcane pulls. Includes templates and GHCR `denied` troubleshooting |
 
 To install them: in claude.ai, upload each folder as a zip under **Settings → Capabilities → Skills**.
 In Claude Code, copy them to `~/.claude/skills/` (or a project's `.claude/skills/`).

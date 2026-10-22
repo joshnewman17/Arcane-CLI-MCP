@@ -1,6 +1,6 @@
-# deploy/arcane/compose.yaml: synced by Arcane Git Sync; the image comes from GHCR (built by CI).
-# Replace <owner>, <repo>, <project>, <container-port> and the default host port.
-# Secrets live in the project's .env in Arcane (entered in the UI), never in git.
+# Compose file for a regular Arcane project: paste it into Projects -> Create in the Arcane UI.
+# The image comes from GHCR (built by CI). Replace <owner>, <repo>, <project>, <container-port>
+# and the default host port. Secrets go in the project's .env in Arcane, never in git.
 services:
   <project>:
     image: ghcr.io/<owner>/<repo>:latest
