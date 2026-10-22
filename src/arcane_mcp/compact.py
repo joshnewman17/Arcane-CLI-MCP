@@ -337,14 +337,15 @@ def _normalize_ts(value: str) -> str:
 
 def cleanup(value: Any) -> Any:
     """Applied to every response: drop ``$schema`` (it leaks Arcane's internal URL) and
-    ``grandTotalItems: 0``, and normalise timestamps to UTC ``YYYY-MM-DDTHH:MM:SSZ``."""
+    ``grandTotalItems`` (inconsistent across endpoints), and normalise timestamps to UTC
+    ``YYYY-MM-DDTHH:MM:SSZ``. The conversion uses the offset in the string, never the local TZ."""
     if isinstance(value, str):
         return _normalize_ts(value)
     if isinstance(value, list):
         return [cleanup(v) for v in value]
     if isinstance(value, dict):
         return {k: cleanup(v) for k, v in value.items()
-                if k != "$schema" and not (k == "grandTotalItems" and v == 0)}
+                if k not in ("$schema", "grandTotalItems")}
     return value
 
 
@@ -460,6 +461,13 @@ def _get_path(obj: Any, parts: list[str]) -> tuple[bool, Any]:
     return True, obj
 
 
+# Names that differ between the compact summaries and Arcane's raw objects.
+FIELD_ALIASES: dict[str, Callable[[Item], tuple[bool, Any]]] = {
+    "name": lambda o: (True, str(o["names"][0]).lstrip("/"))
+    if isinstance(o.get("names"), list) and o["names"] else (False, None),
+}
+
+
 def select_fields(obj: Any, fields: list[str]) -> Any:
     """Keep only ``fields`` (top-level or dotted paths) of an object."""
     if not isinstance(obj, dict):
@@ -468,6 +476,8 @@ def select_fields(obj: Any, fields: list[str]) -> Any:
     for f in fields:
         parts = [p for p in str(f).split(".") if p]
         found, value = _get_path(obj, parts)
+        if not found and len(parts) == 1 and parts[0] in FIELD_ALIASES:
+            found, value = FIELD_ALIASES[parts[0]](obj)
         if not found:
             continue
         node = out

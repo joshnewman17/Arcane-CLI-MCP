@@ -138,8 +138,22 @@ def test_cleanup():
     assert c.cleanup(data) == {
         "pagination": {"totalItems": 3},
         "items": [{"at": "2026-10-22T14:00:00Z", "b": "2026-10-22T14:00:00Z"}],
-        "keep": {"grandTotalItems": 87, "note": "2026-10-22 is a date, not a timestamp"},
+        "keep": {"note": "2026-10-22 is a date, not a timestamp"},
     }
+
+
+@pytest.mark.parametrize("tz", ["UTC", "America/Chicago", "Asia/Tokyo"])
+def test_timestamps_use_the_offset_not_local_tz(monkeypatch, tz):
+    import time
+    monkeypatch.setenv("TZ", tz)
+    time.tzset()
+    try:
+        assert c.cleanup("2026-10-22T09:00:23.397-05:00") == "2026-10-22T14:00:23Z"
+        assert c.cleanup("2026-10-22T14:00:23.397Z") == "2026-10-22T14:00:23Z"
+        assert c.cleanup("2026-10-23T01:30:00+09:00") == "2026-10-22T16:30:00Z"
+    finally:
+        monkeypatch.undo()
+        time.tzset()
 
 
 def test_cleanup_applies_to_every_run(runner, cli):
@@ -243,6 +257,57 @@ def test_exclude_types_overfetches_and_trims(runner, cli):
     assert [i["type"] for i in r["data"]["data"]] == ["project_deploy"] * 4
     assert r["excluded"] == 56
     assert "job_run" not in json.dumps(r["data"])
+
+
+class PagedActivities:
+    """Honours --limit like the real CLI: returns the newest N of a long, mostly-noise history."""
+
+    def __init__(self, items):
+        self.items, self.limits = items, []
+
+    def __call__(self, argv, **kw):
+        args = argv[4:]
+        n = int(args[args.index("--limit") + 1]) if "--limit" in args else 20
+        self.limits.append(n)
+        return SimpleNamespace(returncode=0, stderr="",
+                               stdout=json.dumps({"data": self.items[:n], "pagination": {"totalItems": 844}}))
+
+
+def noisy_history(noise=3):
+    # `noise` sync runs, then one deploy, repeated; consecutive syncs fold into one row.
+    items, i = [], 0
+    for block in range(600 // (noise + 1)):
+        for _ in range(noise):
+            items.append(activity(i % 60, "job_run", SYNC)); i += 1
+        items.append(activity(i % 60, "project_deploy", f"deploy {block}")); i += 1
+    return items
+
+
+def test_limit_counts_rows_after_folding(runner, monkeypatch):
+    fake = PagedActivities(noisy_history())
+    monkeypatch.setattr(cli_mod.subprocess, "run", fake)
+    # Excluding nothing relevant: 8 rows requested, each row is either a folded sync run or a deploy.
+    r = runner.run(["activities", "list", "--limit", "8"], exclude_types=["image_update_check"])
+    assert len(r["data"]["data"]) == 8 and fake.limits == [50]
+    assert "_rows" not in r and "_fetched" not in r
+
+
+def test_limit_refetches_once_when_page_was_too_sparse(runner, monkeypatch):
+    fake = PagedActivities(noisy_history(noise=9))
+    monkeypatch.setattr(cli_mod.subprocess, "run", fake)
+    # Excluding the syncs leaves 1 deploy in 10: 100 fetched → 10 rows, short of 20, so fetch the maximum.
+    r = runner.run(["activities", "list", "--limit", "20"], exclude_types=["job_run"])
+    assert fake.limits == [100, 500] and len(r["data"]["data"]) == 20
+    r = runner.run(["activities", "list", "--limit", "30"], exclude_types=["job_run"])
+    assert len(r["data"]["data"]) == 30 and fake.limits[-2:] == [150, 500]
+    assert "--limit 500" in r["command"]
+
+
+def test_limit_no_refetch_when_history_is_exhausted(runner, monkeypatch):
+    fake = PagedActivities(noisy_history()[:40])
+    monkeypatch.setattr(cli_mod.subprocess, "run", fake)
+    r = runner.run(["activities", "list", "--limit", "20"], exclude_types=["job_run"])
+    assert fake.limits == [100] and len(r["data"]["data"]) == 10
 
 
 def test_exclude_types_defaults_and_inline_limit(runner, cli):
@@ -409,6 +474,11 @@ def test_api_fields(settings):
     assert r["data"]["data"] == {"name": "immich", "updateInfo": {"hasUpdate": True}}
     r = api(settings, containers_payload()).get("/api/environments/0/containers", fields=["names", "state"])
     assert r["data"]["data"][0] == {"names": ["/litellm"], "state": "running"}
+    # Raw containers have `names`; `name` (as in the compact summaries) maps to the first one.
+    r = api(settings, containers_payload()).get("/api/environments/0/containers", fields=["name", "image"])
+    assert r["data"]["data"][0] == {"name": "litellm", "image": "litellm:latest"}
+    r = api(settings, project_payload()).get("/api/environments/0/projects/p1", fields=["name"])
+    assert r["data"]["data"] == {"name": "immich"}
 
 
 @pytest.mark.parametrize("fields", ["name", [1], [""], ["."]])
