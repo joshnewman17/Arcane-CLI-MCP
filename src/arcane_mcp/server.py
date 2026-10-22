@@ -10,22 +10,29 @@ import os
 import sys
 import threading
 import time
-from typing import Any, TextIO
+from collections.abc import Callable
+from typing import Any, TextIO, TypeVar
 
-from mcp.server.mcpserver import MCPServer
+import anyio.to_thread
+from mcp.server.mcpserver import Context, MCPServer
 from mcp_types import ToolAnnotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from . import __version__
+from .access import HEADER as ACCESS_HEADER
+from .access import AccessDenied, AccessVerifier
 from .api import ApiClient
-from .audit import AuditLog, Redactor
+from .audit import AuditLog, Redactor, current_user
 from .cli import CliRunner
 from .config import ConfigError, Settings, load_settings, write_cli_config
 
 log = logging.getLogger("arcane_mcp")
 
 HEALTH_CACHE_S = 60
+# Set by AuthMiddleware after the Access JWT is verified; any client-supplied copy is stripped first.
+USER_HEADER = "x-arcane-mcp-user"
+T = TypeVar("T")
 
 INSTRUCTIONS = """\
 Manage a Docker homelab through Arcane (https://getarcane.app) via the official arcane-cli.
@@ -128,43 +135,55 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
 
     mcp = MCPServer(name="arcane-mcp", version=__version__, instructions=INSTRUCTIONS)
 
+    def as_caller(ctx: Context | None, fn: Callable[[], T]) -> T:
+        """Run ``fn`` with the verified caller (if any) attached to its audit records."""
+        headers = None
+        try:
+            headers = ctx.headers if ctx is not None else None
+        except ValueError:  # no request context (e.g. direct calls in tests)
+            pass
+        token = current_user.set((headers or {}).get(USER_HEADER) or None)
+        try:
+            return fn()
+        finally:
+            current_user.reset(token)
+
     @mcp.tool(
         name="arcane_run",
         description=RUN_DESCRIPTION,
         annotations=ToolAnnotations(title="Run arcane-cli", destructive_hint=True, open_world_hint=False),
     )
     def arcane_run(args: list[str], env_id: str | None = None, confirm: bool = False,
-                   compact: bool = True) -> dict[str, Any]:
-        return runner.run(args, env_id=env_id, confirm=confirm, compact=compact)
+                   compact: bool = True, ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: runner.run(args, env_id=env_id, confirm=confirm, compact=compact))
 
     @mcp.tool(
         name="arcane_help",
         description=HELP_DESCRIPTION,
         annotations=ToolAnnotations(title="arcane-cli help", read_only_hint=True, open_world_hint=False),
     )
-    def arcane_help(command: list[str] | None = None) -> dict[str, Any]:
-        return runner.help(command or [])
+    def arcane_help(command: list[str] | None = None, ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: runner.help(command or []))
 
     @mcp.tool(
         name="arcane_api_get",
         description=API_DESCRIPTION,
         annotations=ToolAnnotations(title="Arcane API (GET)", read_only_hint=True, open_world_hint=False),
     )
-    def arcane_api_get(path: str, query: dict[str, Any] | None = None) -> dict[str, Any]:
-        return api.get(path, query)
+    def arcane_api_get(path: str, query: dict[str, Any] | None = None,
+                       ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: api.get(path, query))
 
     @mcp.tool(
         name="arcane_environments",
         description=ENV_DESCRIPTION,
         annotations=ToolAnnotations(title="List environments", read_only_hint=True, open_world_hint=False),
     )
-    def arcane_environments() -> dict[str, Any]:
-        return runner.environments()
+    def arcane_environments(ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, runner.environments)
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> Response:
-        import anyio.to_thread
-
         result = await anyio.to_thread.run_sync(health.get)
         return JSONResponse(
             {"status": "ok" if result["ok"] else "unhealthy", "version": __version__,
@@ -175,34 +194,65 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     return mcp
 
 
-class BearerAuthMiddleware:
-    """Require `Authorization: Bearer <MCP_AUTH_TOKEN>` on everything except /healthz."""
+async def _deny(send: Any, status: int, www_authenticate: bytes | None = None) -> None:
+    headers = [(b"content-type", b"application/json")]
+    if www_authenticate:
+        headers.append((b"www-authenticate", www_authenticate))
+    await send({"type": "http.response.start", "status": status, "headers": headers})
+    await send({"type": "http.response.body", "body": json.dumps({"error": "unauthorized"}).encode()})
 
-    def __init__(self, app: Any, token: str) -> None:
+
+class AuthMiddleware:
+    """Authenticate every request except /healthz.
+
+    - Cloudflare Access mode (``verifier`` set): require a valid ``Cf-Access-Jwt-Assertion`` JWT.
+      The bearer token is not consulted; Claude's OAuth token is handled by Access.
+    - Bearer mode (``token`` set): require ``Authorization: Bearer <MCP_AUTH_TOKEN>``.
+
+    The internal user header is always stripped from the incoming request, and in Access mode
+    it is set to the verified email so tools can attribute audit records.
+    """
+
+    def __init__(self, app: Any, token: str | None = None, verifier: AccessVerifier | None = None) -> None:
         self.app = app
-        self._token = token.encode()
+        self._token = token.encode() if token else None
+        self._verifier = verifier
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
         if scope["type"] != "http" or scope.get("path") == "/healthz":
             await self.app(scope, receive, send)
             return
-        header = dict(scope.get("headers") or []).get(b"authorization", b"")
-        scheme, _, value = header.partition(b" ")
-        if scheme.lower() != b"bearer" or not hmac.compare_digest(value.strip(), self._token):
-            body = json.dumps({"error": "unauthorized"}).encode()
-            await send({"type": "http.response.start", "status": 401,
-                        "headers": [(b"content-type", b"application/json"),
-                                    (b"www-authenticate", b'Bearer realm="arcane-mcp"')]})
-            await send({"type": "http.response.body", "body": body})
-            return
-        await self.app(scope, receive, send)
+        user_header = USER_HEADER.encode()
+        headers = [(k, v) for k, v in scope.get("headers") or [] if k.lower() != user_header]
+        lookup = {k.lower(): v for k, v in headers}
+
+        if self._verifier is not None:
+            assertion = lookup.get(ACCESS_HEADER.encode(), b"").decode("latin-1") or None
+            try:
+                identity = await anyio.to_thread.run_sync(self._verifier.verify, assertion)
+            except AccessDenied as exc:
+                log.warning("rejected request to %s: %s", scope.get("path"), exc)
+                await _deny(send, 401)
+                return
+            if identity.email:
+                headers.append((user_header, identity.email.encode()))
+        elif self._token is not None:
+            scheme, _, value = lookup.get(b"authorization", b"").partition(b" ")
+            if scheme.lower() != b"bearer" or not hmac.compare_digest(value.strip(), self._token):
+                await _deny(send, 401, b'Bearer realm="arcane-mcp"')
+                return
+
+        await self.app({**scope, "headers": headers}, receive, send)
 
 
-def http_app(settings: Settings, mcp: MCPServer, path: str = "/mcp") -> Any:
+def http_app(settings: Settings, mcp: MCPServer, path: str = "/mcp",
+             verifier: AccessVerifier | None = None) -> Any:
     app = mcp.streamable_http_app(streamable_http_path=path, host=settings.host)
-    if settings.auth_token:
-        return BearerAuthMiddleware(app, settings.auth_token)
-    return app
+    if verifier is None and settings.access_enabled:
+        verifier = AccessVerifier(settings.access_team_domain or "", settings.access_aud or "")
+    if verifier is None and not settings.auth_token:
+        return app
+    return AuthMiddleware(app, token=settings.auth_token, verifier=verifier)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -230,10 +280,14 @@ def main(argv: list[str] | None = None) -> int:
     import uvicorn
 
     path = opts.path or os.environ.get("MCP_PATH", "/mcp")
-    if not settings.auth_token:
+    if settings.access_enabled:
+        log.info("Cloudflare Access mode: requests need a valid Access JWT (team %s)", settings.access_team_domain)
+        if settings.auth_token:
+            log.info("MCP_AUTH_TOKEN is ignored in Cloudflare Access mode")
+    elif not settings.auth_token:
         log.warning("=" * 72)
         log.warning("MCP_AUTH_TOKEN is not set: anyone who can reach port %s can control Docker", settings.port)
-        log.warning("through Arcane. Set MCP_AUTH_TOKEN or put an authenticating proxy in front.")
+        log.warning("through Arcane. Set MCP_AUTH_TOKEN, or CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD.")
         log.warning("=" * 72)
     log.info("arcane-mcp %s listening on %s:%s%s (readonly=%s, cli=%s)", __version__, settings.host,
              settings.port, "/<path>" if path != "/mcp" else path, settings.readonly, settings.cli_path)

@@ -64,6 +64,16 @@ def test_readme_project_compose_parses():
     readme = (ROOT / "README.md").read_text()
     section = readme[readme.index("## 3b. Deploy as an Arcane project"):readme.index("## 4. Connect Claude")]
     block = re.search(r"```yaml\n(.*?)```", section, re.S).group(1)
-    service = yaml.safe_load(re.sub(r"(?m)^   ", "", block))["services"]["arcane-cli-mcp"]
+    compose = yaml.safe_load(re.sub(r"(?m)^   ", "", block))
+    service, tunnel = compose["services"]["arcane-cli-mcp"], compose["services"]["cloudflared"]
     assert service["image"] == "ghcr.io/joshnewman17/arcane-mcp:latest"
-    assert service["env_file"] == ".env" and service["read_only"] is True and "build" not in service
+    assert service["read_only"] is True and "build" not in service
+    # DMZ pattern: static IPs on br0.14, nothing published, Access mode on.
+    assert "ports" not in service and "ports" not in tunnel
+    assert service["networks"]["br0.14"]["ipv4_address"] == "192.168.14.18"
+    assert tunnel["networks"]["br0.14"]["ipv4_address"] == "192.168.14.19"
+    assert compose["networks"]["br0.14"]["external"] is True
+    assert {"CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "ARCANE_API_KEY"} <= set(service["environment"])
+    # Secrets go only where they're needed: no env_file, tunnel token only on cloudflared.
+    assert "env_file" not in service and "TUNNEL_TOKEN" not in service["environment"]
+    assert "ARCANE_API_KEY" not in tunnel["environment"]

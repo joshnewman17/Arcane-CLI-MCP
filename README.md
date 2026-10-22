@@ -76,7 +76,8 @@ takes `--config <path>`. When an `api_key` is set, the CLI ignores saved session
 | `ARCANE_DEFAULT_ENV` | Default environment id | `0` |
 | `MCP_HOST` / `MCP_PORT` | Listen address | `0.0.0.0` / `8080` |
 | `MCP_PATH` | MCP endpoint path | `/mcp` |
-| `MCP_AUTH_TOKEN` | Required `Authorization: Bearer` token. A loud warning is logged if unset. | – |
+| `MCP_AUTH_TOKEN` | Required `Authorization: Bearer` token. Ignored in Cloudflare Access mode. A loud warning is logged if neither auth mode is configured. | – |
+| `CF_ACCESS_TEAM_DOMAIN` / `CF_ACCESS_AUD` | Cloudflare Access mode: every MCP request must carry a valid `Cf-Access-Jwt-Assertion` JWT for this team and application AUD tag (see [Connect Claude](#claudeai-custom-connector)). Set both or neither. | – |
 | `ARCANE_MCP_READONLY` | Only allow read-only commands | `false` |
 | `MAX_OUTPUT_CHARS` | Truncation limit for tool results | `40000` |
 | `DEFAULT_TIMEOUT_S` / `LONG_TIMEOUT_S` | Normal / streaming-op timeouts | `120` / `1800` |
@@ -166,7 +167,10 @@ image, so nothing is built on the host.
 1. **Registry access:** under **Customization → Container Registries → ghcr.io**, the token must be a
    **classic** PAT with **`read:packages`**. GHCR doesn't accept fine-grained tokens, and a token with
    only `repo` passes Arcane's Test button but every private pull fails with `denied`.
-2. **Create the project** in the Arcane UI (**Projects → Create**), named `arcane-cli-mcp`, with this compose file:
+2. **Create the project** in the Arcane UI (**Projects → Create**), named `arcane-cli-mcp`. This is how
+   it runs on Node804: in the DMZ (`br0.14`, VLAN 14) with static IPs and **no published ports**, reached
+   only through its own `cloudflared` sidecar, with Cloudflare Access in front. It's the same pattern as the
+   other MCP servers.
 
    ```yaml
    services:
@@ -174,11 +178,14 @@ image, so nothing is built on the host.
        image: ghcr.io/joshnewman17/arcane-mcp:latest
        container_name: arcane-cli-mcp
        restart: unless-stopped
-       env_file: .env
+       dns: [192.168.14.1]
        environment:
+         ARCANE_URL: http://10.1.21.104:3552 # Arcane itself (VLAN 21); OPNsense rule DMZ .18 -> :3552
+         ARCANE_API_KEY: ${ARCANE_API_KEY}
+         CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN}
+         CF_ACCESS_AUD: ${CF_ACCESS_AUD}
          AUDIT_LOG_PATH: /data/audit.log
-       ports:
-         - "${MCP_HOST_PORT:-8090}:8080"
+         TZ: ${TZ}
        volumes:
          - data:/data
        tmpfs:
@@ -188,14 +195,40 @@ image, so nothing is built on the host.
          - no-new-privileges:true
        cap_drop:
          - ALL
+       networks:
+         br0.14:
+           ipv4_address: 192.168.14.18
+
+     cloudflared:
+       image: cloudflare/cloudflared:latest
+       container_name: arcane-cli-mcp-tunnel
+       restart: unless-stopped
+       command: tunnel run
+       environment:
+         TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+         TZ: ${TZ}
+       dns: [192.168.14.1]
+       depends_on: [arcane-cli-mcp]
+       networks:
+         br0.14:
+           ipv4_address: 192.168.14.19
+
+   networks:
+     br0.14:
+       external: true
+
    volumes:
      data:
    ```
 
-   Then set `ARCANE_URL`, `ARCANE_API_KEY` and `MCP_AUTH_TOKEN` in its **.env**.
+   Its **.env** in Arcane: `ARCANE_API_KEY`, `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `TUNNEL_TOKEN`, `TZ`.
+   Each value goes only to the container that needs it, so the tunnel token never reaches the MCP server.
    (`projects create -f` is blocked through arcane-mcp because it reads a local file, so this step happens in the UI.)
-3. Start it, through arcane-mcp or the UI: `projects up arcane-cli-mcp`. Check `http://<host>:8090/healthz`.
-4. **Updates:** after CI publishes a new image, run `projects redeploy arcane-cli-mcp`, which pulls `:latest`
+3. **OPNsense:** a pass rule on the DMZ interface: `192.168.14.18/32` → `10.1.21.104/32` TCP `3552`, placed
+   above any DMZ → private-network block rule.
+4. Start it, through arcane-mcp or the UI: `projects up arcane-cli-mcp`. The container's healthcheck runs
+   `arcane-cli doctor` against Arcane.
+5. **Updates:** after CI publishes a new image, run `projects redeploy arcane-cli-mcp`, which pulls `:latest`
    and recreates the container. Arcane's image-update checks also flag it, and auto-update can pick it up
    if you've enabled it for the container.
 
@@ -208,12 +241,20 @@ e.g. through a reverse proxy (SWAG/NPM/Caddy/Traefik) or a Cloudflare Tunnel poi
 `http://<unraid-ip>:8080`. Then **Settings → Connectors → Add custom connector** with URL
 `https://mcp.example.com/mcp`.
 
-Authentication: the server checks `Authorization: Bearer $MCP_AUTH_TOKEN`. If your client can't
-send a static header, either:
-- put an authenticating proxy in front (e.g. Cloudflare Access, or an OAuth proxy the connector supports), or
-- as a weaker fallback, unset `MCP_AUTH_TOKEN`, set `MCP_PATH` to a long random path
-  (`/mcp-3f9c...`), and only expose it over HTTPS. Uvicorn access logging is disabled, so the
-  path isn't logged here, but your proxy may log it.
+Authentication has two modes:
+
+- **Cloudflare Access (recommended for claude.ai).** Put the hostname behind an Access self-hosted application
+  with **Managed OAuth** (`oauth_configuration.enabled`, plus Dynamic Client Registration allowing
+  `https://claude.ai/api/mcp/auth_callback` and `https://claude.com/api/mcp/auth_callback`). Claude signs in
+  through Access, and Access forwards a signed JWT in `Cf-Access-Jwt-Assertion`. Set
+  `CF_ACCESS_TEAM_DOMAIN` (e.g. `myteam` or `myteam.cloudflareaccess.com`) and `CF_ACCESS_AUD` (the
+  application's AUD tag). The server then verifies every request's JWT signature (against
+  `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`), audience, issuer and expiry, which is what
+  [Cloudflare requires](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/managed-oauth/)
+  for MCP servers behind Managed OAuth. Requests that skip Access, e.g. from a neighbour on the same network,
+  get a 401. The caller's email is recorded as `user` in every audit entry.
+- **Bearer token.** For clients that can send a static header (Claude Code, MCP Inspector):
+  `Authorization: Bearer $MCP_AUTH_TOKEN`.
 
 Never expose this server to the internet without one of these. It can stop and delete your containers.
 

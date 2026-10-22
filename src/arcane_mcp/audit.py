@@ -7,11 +7,15 @@ import logging
 import re
 import sys
 import threading
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
 REDACTED = "[REDACTED]"
+
+# The authenticated caller (Cloudflare Access email) for the tool call in progress, if any.
+current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
 
 # Patterns that look like credentials in free text, even when we don't know the exact value.
 # The value may not start with `{` or `[`, so `"apiKey": {...}` in JSON-ish text is left alone.
@@ -77,6 +81,8 @@ class AuditLog:
 
     def record(self, **fields: Any) -> dict[str, Any]:
         entry = {"ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"), **fields}
+        if current_user.get() and "user" not in entry:
+            entry["user"] = current_user.get()
         entry = self._redactor.obj(entry)
         line = json.dumps(entry, default=str, separators=(",", ":"))
         with self._lock:

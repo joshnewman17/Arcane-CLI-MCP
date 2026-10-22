@@ -59,6 +59,13 @@ class Settings:
     state_dir: Path = Path(tempfile.gettempdir()) / "arcane-mcp"
     audit_log_path: Path | None = Path("/data/audit.log")
     verify_tls: bool = True
+    # Cloudflare Access: when both are set, every MCP request must carry a valid Access JWT.
+    access_team_domain: str | None = None
+    access_aud: str | None = None
+
+    @property
+    def access_enabled(self) -> bool:
+        return bool(self.access_team_domain and self.access_aud)
 
     @property
     def cli_config_path(self) -> Path:
@@ -102,6 +109,11 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
             "ARCANE_URL has a path (%s); arcane-cli will call %s/api/... - make sure that is right", url_path, url
         )
 
+    team = env.get("CF_ACCESS_TEAM_DOMAIN", "").strip() or None
+    aud = env.get("CF_ACCESS_AUD", "").strip() or None
+    if bool(team) != bool(aud):
+        raise ConfigError("set both CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD, or neither")
+
     audit = env.get("AUDIT_LOG_PATH", "/data/audit.log").strip()
     cli_path = env.get("ARCANE_CLI_PATH", "").strip() or shutil.which("arcane-cli") or "arcane-cli"
 
@@ -120,6 +132,8 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         state_dir=Path(env.get("ARCANE_MCP_STATE_DIR", "").strip() or Path(tempfile.gettempdir()) / "arcane-mcp"),
         audit_log_path=Path(audit) if audit else None,
         verify_tls=_bool(env.get("ARCANE_VERIFY_TLS"), default=True),
+        access_team_domain=team,
+        access_aud=aud,
     )
 
 
