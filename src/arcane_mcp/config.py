@@ -10,11 +10,13 @@ every invocation. See https://getarcane.app/docs/reference/cli/config
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -89,6 +91,16 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         raise ConfigError("ARCANE_URL must start with http:// or https://")
     if not key:
         raise ConfigError("ARCANE_API_KEY (or ARCANE_API_KEY_FILE) is required")
+    url_path = urlsplit(url).path
+    if url_path.rstrip("/").endswith(("/dashboard", "/login", "/settings", "/environments")):
+        # A URL copied from the browser points at a UI page; the API lives at <base>/api.
+        raise ConfigError(
+            f"ARCANE_URL ends in a web UI path ({url_path!r}); use the base URL of the instance instead"
+        )
+    if url_path:
+        logging.getLogger("arcane_mcp").warning(
+            "ARCANE_URL has a path (%s); arcane-cli will call %s/api/... - make sure that is right", url_path, url
+        )
 
     audit = env.get("AUDIT_LOG_PATH", "/data/audit.log").strip()
     cli_path = env.get("ARCANE_CLI_PATH", "").strip() or shutil.which("arcane-cli") or "arcane-cli"

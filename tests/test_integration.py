@@ -61,4 +61,6 @@ def test_readonly_blocks_mutation(live):
 def test_key_not_leaked(live):
     runner, settings, stream = live
     runner.run(["auth", "me"])
-    assert settings.arcane_api_key not in stream.getvalue()
+    # Compute a bool first: a bare `assert key not in text` would make pytest print the real key on failure.
+    leaked = settings.arcane_api_key in stream.getvalue()
+    assert not leaked, "API key found in audit output"

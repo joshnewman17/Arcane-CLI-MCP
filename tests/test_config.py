@@ -18,6 +18,8 @@ def test_defaults():
         ({"ARCANE_URL": "http://a"}, "ARCANE_API_KEY"),
         ({"ARCANE_URL": "http://a", "ARCANE_API_KEY": "k", "MCP_PORT": "abc"}, "integer"),
         ({"ARCANE_URL": "http://a", "ARCANE_API_KEY": "k", "LONG_TIMEOUT_S": "0"}, "positive"),
+        ({"ARCANE_URL": "https://docker.example.com/dashboard", "ARCANE_API_KEY": "k"}, "web UI path"),
+        ({"ARCANE_URL": "https://docker.example.com/dashboard/", "ARCANE_API_KEY": "k"}, "web UI path"),
     ],
 )
 def test_invalid(env, msg):
