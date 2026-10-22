@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "arcane-mcp"
+version = "0.1.0"
+description = "Remote MCP server for managing Docker through Arcane, by wrapping arcane-cli"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "mcp>=2.3,<3",
+    "httpx>=0.28,<1",
+    "uvicorn>=0.34",
+    "starlette>=0.46",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[project.scripts]
+arcane-mcp = "arcane_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arcane_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: talks to a real Arcane instance (set ARCANE_IT=1)"]

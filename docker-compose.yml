@@ -1,0 +1,22 @@
+services:
+  arcane-mcp:
+    build:
+      context: .
+      args:
+        ARCANE_CLI_VERSION: "2.16.1"
+    image: arcane-mcp:local
+    container_name: arcane-mcp
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    # The CLI config (which holds the API key) is written here at startup; keep it off disk.
+    tmpfs:
+      - /tmp:mode=1777,size=16m
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
