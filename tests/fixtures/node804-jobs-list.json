@@ -1,0 +1,227 @@
+{
+ "durableRuns": true,
+ "observedAt": "2026-10-22T14:21:41.188806691Z",
+ "offline": false,
+ "isAgent": false,
+ "jobs": [
+  {
+   "lastRun": {
+    "id": "2f20ffd6-f3e9-4664-a4fb-e92a67b5f24c",
+    "jobId": "analytics-heartbeat",
+    "environmentId": "0",
+    "trigger": "scheduled",
+    "status": "skipped",
+    "createdAt": "2026-10-22T14:00:00.183912705Z",
+    "updatedAt": "2026-10-22T14:00:00.225228517Z",
+    "startedAt": "2026-10-22T14:00:00.211774466Z",
+    "finishedAt": "2026-10-22T14:00:00.225228517Z",
+    "attemptCount": 1,
+    "owner": "2aca3f7c-f2da-42f6-b35c-1b81ed756dbc/2a657261-7cc5-4a21-8ba7-48035bc8760a",
+    "outcome": {
+     "status": "skipped"
+    },
+    "attempts": [
+     {
+      "number": 1,
+      "startedAt": "2026-10-22T14:00:00.211774466Z",
+      "finishedAt": "2026-10-22T14:00:00.225228517Z",
+      "outcome": {
+       "status": "skipped"
+      }
+     }
+    ],
+    "remoteDeliveryAttempted": false,
+    "remoteRetryRequested": false,
+    "remoteRetryAttempted": false,
+    "remoteAttemptCount": 0,
+    "remoteAccepted": false,
+    "remoteSettled": false
+   },
+   "id": "analytics-heartbeat",
+   "name": "Analytics Heartbeat",
+   "description": "Checks hourly and sends anonymous telemetry at most once per 24 hours",
+   "category": "telemetry",
+   "schedule": "automatic (checked hourly; sent once per 24h)",
+   "enabled": true,
+   "managerOnly": false,
+   "isContinuous": false,
+   "canRunManually": true,
+   "prerequisites": []
+  },
+  {
+   "id": "auto-update",
+   "name": "Auto Update",
+   "description": "Automatically updates containers when new images are available",
+   "category": "updates",
+   "schedule": "0 0 0 * * *",
+   "enabled": false,
+   "managerOnly": false,
+   "isContinuous": false,
+   "canRunManually": true,
+   "prerequisites": [
+    {
+     "settingKey": "pollingEnabled",
+     "label": "Image polling enabled",
+     "isMet": true,
+     "settingsUrl": "/settings/updates"
+    },
+    {
+     "settingKey": "autoUpdate",
+     "label": "Auto update enabled",
+     "isMet": false,
+     "settingsUrl": "/settings/updates"
+    }
+   ],
+   "settingsKey": "autoUpdateInterval"
+  },
+  {
+   "id": "auto-patch",
+   "name": "Image Auto Patch",
+   "description": "Patches images whose latest vulnerability scan found fixable OS package vulnerabilities using Copacetic",
+   "category": "security",
+   "schedule": "0 0 3 * * *",
+   "enabled": false,
+   "managerOnly": false,
+   "isContinuous": false,
+   "canRunManually": true,
+   "prerequisites": [
+    {
+     "settingKey": "imageAutoPatchEnabled",
+     "label": "Scheduled image patching enabled",
+     "isMet": false,
+     "settingsUrl": "/settings/security"
+    }
+   ],
+   "settingsKey": "imageAutoPatchInterval"
+  },
+  {
+   "id": "filesystem-watcher",
+   "name": "Filesystem Watcher",
+   "description": "Monitors project directory for changes and syncs automatically",
+   "category": "sync",
+   "schedule": "continuous",
+   "enabled": true,
+   "managerOnly": false,
+   "isContinuous": true,
+   "canRunManually": false,
+   "prerequisites": []
+  },
+  {
+   "lastRun": {
+    "id": "ead65ae4-80b8-495c-85b5-02e473bbc5e4",
+    "jobId": "image-polling",
+    "environmentId": "0",
+    "trigger": "scheduled",
+    "status": "partial",
+    "createdAt": "2026-10-22T14:00:00.438801926Z",
+    "updatedAt": "2026-10-22T14:01:28.440036626Z",
+    "startedAt": "2026-10-22T14:00:00.509032397Z",
+    "finishedAt": "2026-10-22T14:01:28.440036626Z",
+    "attemptCount": 1,
+    "owner": "2aca3f7c-f2da-42f6-b35c-1b81ed756dbc/96d30bf7-e5d7-4df7-b3f9-28e84ddb3e3b",
+    "outcome": {
+     "status": "partial",
+     "message": "Image update check completed: 85 checked, 1 errors",
+     "activityId": "image-check-ead65ae4-80b8-495c-85b5-02e473bbc5e4-1",
+     "targets": [
+      {
+       "resourceType": "image",
+       "id": "bmmbmm01/oldprivileged-unifiosserver:latest",
+       "status": "failed",
+       "message": "distribution inspect of docker.io/bmmbmm01/oldprivileged-unifiosserver:latest failed: Error response from daemon: errors:\ndenied: requested access to the resource is denied\nunauthorized: authentication required"
+      },
+      {
+       "resourceType": "workflow",
+       "id": "image-check-ead65ae4-80b8-495c-85b5-02e473bbc5e4-1",
+       "status": "partial",
+       "activityId": "image-check-ead65ae4-80b8-495c-85b5-02e473bbc5e4-1"
+      }
+     ],
+     "steps": [
+      {
+       "name": "prepare",
+       "status": "succeeded",
+       "total": 1,
+       "completed": 1,
+       "failed": 0,
+       "attempts": 1,
+       "startedAt": "2026-10-22T09:00:00.581565308-05:00",
+       "finishedAt": "2026-10-22T09:00:00.603197574-05:00"
+      },
+      {
+       "name": "check",
+       "status": "partial",
+       "total": 85,
+       "completed": 84,
+       "failed": 1,
+       "attempts": 87,
+       "startedAt": "2026-10-22T09:00:00.643269643-05:00",
+       "finishedAt": "2026-10-22T09:01:28.209757383-05:00"
+      }
+     ]
+    },
+    "attempts": [
+     {
+      "number": 1,
+      "startedAt": "2026-10-22T14:00:00.509032397Z",
+      "finishedAt": "2026-10-22T14:01:28.440036626Z",
+      "outcome": {
+       "status": "partial",
+       "message": "Image update check completed: 85 checked, 1 errors"
+      }
+     }
+    ],
+    "remoteDeliveryAttempted": false,
+    "remoteRetryRequested": false,
+    "remoteRetryAttempted": false,
+    "remoteAttemptCount": 0,
+    "remoteAccepted": false,
+    "remoteSettled": false
+   },
+   "lastError": "Image update check completed: 85 checked, 1 errors",
+   "workerHealth": {
+    "status": "running",
+    "updatedAt": "2026-10-22T02:04:46.35191799-05:00"
+   },
+   "id": "image-polling",
+   "name": "Image Update Watcher",
+   "description": "Checks container registries on a schedule and after Docker image changes",
+   "category": "updates",
+   "schedule": "0 0 * * * *",
+   "nextRun": "2026-10-22T10:00:00-05:00",
+   "enabled": true,
+   "managerOnly": false,
+   "isContinuous": true,
+   "canRunManually": true,
+   "prerequisites": [
+    {
+     "settingKey": "pollingEnabled",
+     "label": "Image polling enabled",
+     "isMet": true,
+     "settingsUrl": "/settings/updates"
+    }
+   ],
+   "settingsKey": "pollingInterval",
+   "currentRun": {
+    "id": "run-2",
+    "status": "running",
+    "startedAt": "2026-10-22T10:00:00-05:00",
+    "outcome": {
+     "steps": [
+      {
+       "name": "prepare",
+       "total": 1,
+       "completed": 1
+      },
+      {
+       "name": "check",
+       "status": "running",
+       "total": 85,
+       "completed": 64
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

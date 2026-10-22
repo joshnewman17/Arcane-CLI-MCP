@@ -66,7 +66,8 @@ def test_bad_env_id(runner, fake_run, bad):
     fr = fake_run(stdout="{}")
     r = runner.run(["containers", "list"], env_id=bad)
     assert r["ok"] is False and "env_id" in r["error"]
-    assert fr.calls == []
+    # At most the environment lookup ran, never the command itself.
+    assert not any("containers" in c.argv for c in fr.calls)
 
 
 def test_confirm_appends_yes(runner, fake_run):

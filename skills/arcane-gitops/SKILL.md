@@ -14,6 +14,9 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_help`.
 
 ## Steps
 1. **List syncs.** `["gitops", "list", "--all"]`. Identify the sync the user means (by name, repo, or project).
+   An empty list doesn't mean nothing is git-backed: projects can also sync their compose file from a repository
+   directly. Check `["repos", "list"]` and `["projects", "get", "<project>"]`, and look for `job_run` activities like
+   "Successfully synced compose file from … to project …" (`["activities", "list", "--type", "job_run", "--limit", "5"]`).
 2. **Status.** `["gitops", "status", "<sync>"]`. Report the last synced commit, last result, any error, and whether the remote is ahead. `["gitops", "get", "<sync>"]` shows configuration (repo, branch, compose path).
 3. **Ask** whether to sync now. Mention which project it will redeploy.
 4. **Sync.** `["gitops", "sync", "<sync>"]`.

@@ -22,14 +22,41 @@ current_user: ContextVar[str | None] = ContextVar("current_user", default=None)
 # compose placeholders like `ARCANE_API_KEY: ${ARCANE_API_KEY:?required}` are left alone.
 _PATTERNS = [
     re.compile(r"(?i)(x-api-key\s*[:=]\s*)(?![{\[$?-])([^\s,;\"']+)"),
-    re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)(?![{\[$?-])([^\s,;\"']+)"),
+    re.compile(r"(?i)(authorization\s*[:=]\s*(?:(?:bearer|basic|token)\s+)?)(?![{\[$?-])([^\s,;\"']+)"),
+    # A bare `Bearer <token>` / `Basic <b64>`; the lookahead keeps prose like "Basic authentication".
+    re.compile(r"(\b(?:Bearer|Basic|bearer|basic)\s+)"
+               r"(?=[A-Za-z0-9._~+/=-]*(?:[0-9+/=]|[A-Z][a-z]|[a-z][A-Z]))([A-Za-z0-9._~+/=-]{8,})"),
     re.compile(r"(?i)(\"?api[_-]?key\"?\s*[:=]\s*\"?)(?![{\[$?-])([^\s,;\"']+)"),
     re.compile(r"(?i)(\"?(?:access|refresh|jwt)[_-]?token\"?\s*[:=]\s*\"?)(?![{\[$?-])([^\s,;\"']+)"),
-    # .env-style lines whose key names a credential: `TUNNEL_TOKEN=eyJ...`, `DB_PASSWORD=...`.
+    # .env-style lines (and compose `environment:` mappings, and `KEY=value` items of env arrays)
+    # whose key names a credential: `TUNNEL_TOKEN=eyJ...`, `DB_PASSWORD: ...`, `SENTRY_DSN=...`.
     re.compile(
-        r"(?m)^(\s*(?:export\s+)?[A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|COOKIE)[A-Z0-9_]*\s*=\s*)"
-        r"(?![$\s])(.+)$"
+        r"(?m)^(\s*(?:-\s*)?[\"']?(?:export\s+)?"
+        r"(?:[A-Z0-9_]*(?:TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|COOKIE)[A-Z0-9_]*|(?:[A-Z0-9_]*_)?(?:PASS|PWD|DSN))"
+        r"(?:\s*=\s*|:\s+))(?![$\s|>])(.+?)([\"']?)$"
     ),
+    # Userinfo in any URL: `postgresql://user:pw@db`, `redis://:pw@cache`, `mongodb+srv://u:p@x`.
+    re.compile(r"(?i)(\b[a-z][a-z0-9+.-]*://[^\s:/@\"']*:)(?!\$\{|\[REDACTED\])([^\s@/\"']+)(?=@)"),
+    # Credential-like query parameters: `?token=...`, `&sig=...`.
+    re.compile(
+        r"(?i)([?&](?:password|passwd|pwd|pass|token|access_token|refresh_token|id_token|api[_-]?key|key|"
+        r"secret|client_secret|sig|signature|auth)=)(?![$\[])([^&\s\"'#]+)"
+    ),
+]
+
+# Credentials recognisable by shape alone; the whole match is replaced.
+_SHAPES = [
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)", re.S),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*"),  # JWT
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\bgh[opsur]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bsk-(?:[a-z]+-)?[A-Za-z0-9_-]{20,}"),  # OpenAI / Anthropic-style keys
+    re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),  # Slack
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),  # AWS access key id
+    re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}"),  # GitLab
+    # htpasswd hashes (traefik basicauth labels etc.), with compose's `$$` escaping.
+    re.compile(r"\$\$?(?:apr1|2[abxy]|5|6|y)\$\$?[^\s,\"']+"),
+    re.compile(r"\{SHA\}[A-Za-z0-9+/=]{20,}"),
 ]
 
 # Object keys whose string values are credentials. `envContent` is a whole project .env file
@@ -38,6 +65,19 @@ _SECRET_KEYS = re.compile(
     r"(?i)^(x-)?(api[_-]?key|(access|refresh|jwt|auth|tunnel|bearer)?[_-]?token|password|passwd|"
     r"secret|client[_-]?secret|private[_-]?key|env[_-]?content)$"
 )
+# Dotted keys (container labels) that carry credentials, e.g. traefik's basicauth users.
+_SECRET_LABELS = re.compile(r"(?i)(?:(?:basic|digest)auth\.users|[._-](?:password|passwd|secret|token))$")
+
+
+def _is_secret_key(key: str) -> bool:
+    return bool(_SECRET_KEYS.match(key) or _SECRET_LABELS.search(key))
+
+
+def _keep_prefix(m: re.Match[str]) -> str:
+    """Replace the credential (group 2), keeping the key before it and any closing quote (group 3)."""
+    if m.group(2) == REDACTED:
+        return m.group(0)
+    return m.group(1) + REDACTED + (m.group(3) or "" if m.re.groups >= 3 else "")
 
 
 class Redactor:
@@ -50,8 +90,10 @@ class Redactor:
             return value
         for s in self._secrets:
             value = value.replace(s, REDACTED)
+        for pat in _SHAPES:
+            value = pat.sub(REDACTED, value)
         for pat in _PATTERNS:
-            value = pat.sub(lambda m: m.group(1) + REDACTED, value)
+            value = pat.sub(_keep_prefix, value)
         return value
 
     def obj(self, value: Any) -> Any:
@@ -62,7 +104,7 @@ class Redactor:
             return [self.obj(v) for v in value]
         if isinstance(value, dict):
             return {
-                k: REDACTED if isinstance(v, str) and v and _SECRET_KEYS.match(str(k)) else self.obj(v)
+                k: REDACTED if isinstance(v, str) and v and _is_secret_key(str(k)) else self.obj(v)
                 for k, v in value.items()
             }
         return value
