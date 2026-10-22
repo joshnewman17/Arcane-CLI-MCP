@@ -55,7 +55,7 @@ def compose_api(request: httpx.Request):
     assert request.url.path == f"/api/environments/0/projects/{PROJECT_ID}/compose"
     return httpx.Response(200, json={"data": {
         "id": PROJECT_ID, "name": "app", "composeFileName": "compose.yaml", "composeContent": CURRENT,
-        "envContent": ENV_SECRET, "services": [{"name": "app"}]}})
+        "envContent": ENV_SECRET, "services": [{"service": "app", "state": "running"}]}})
 
 
 @pytest.fixture

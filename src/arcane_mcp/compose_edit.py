@@ -71,12 +71,18 @@ class ComposeEditor:
             raise LookupError(r.get("error") or f"Arcane returned HTTP {r.get('status')}")
         data = r.get("data") or {}
         data = data.get("data", data) if isinstance(data, dict) else {}
+        compose = data.get("composeContent") or ""
+        try:
+            doc = yaml.safe_load(compose)
+            services = list(doc["services"]) if isinstance(doc, dict) and isinstance(doc.get("services"), dict) else []
+        except yaml.YAMLError:
+            services = []
         return {
             "project_id": project_id,
             "compose_file": data.get("composeFileName"),
             # Already passed through the redactor by ApiClient; envContent is withheld there too.
-            "compose": data.get("composeContent") or "",
-            "services": [s.get("name") for s in data.get("services") or [] if isinstance(s, dict) and s.get("name")],
+            "compose": compose,
+            "services": services,
         }
 
     @staticmethod
