@@ -102,3 +102,11 @@ def test_http_error_is_redacted(settings, audit_stream):
     c = make_client(settings, handler, audit_stream)
     r = c.get("/api/x")
     assert r["ok"] is False and API_KEY not in json.dumps(r)
+
+
+def test_openapi_like_payload_stays_json(settings, audit_stream):
+    spec = {"components": {"schemas": {"Env": {"properties": {"apiKey": {"type": "string"}}}}},
+            "paths": {"/api/x": {}}}
+    c = make_client(settings, lambda req: httpx.Response(200, json=spec), audit_stream)
+    r = c.get("/api/openapi.json")
+    assert r["data"] == spec and "raw" not in r

@@ -13,13 +13,20 @@ from typing import Any, TextIO
 
 REDACTED = "[REDACTED]"
 
-# Patterns that look like credentials even when we don't know the exact value.
+# Patterns that look like credentials in free text, even when we don't know the exact value.
+# The value may not start with `{` or `[`, so `"apiKey": {...}` in JSON-ish text is left alone.
 _PATTERNS = [
-    re.compile(r"(?i)(x-api-key\s*[:=]\s*)([^\s,;\"']+)"),
-    re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)([^\s,;\"']+)"),
-    re.compile(r"(?i)(\"?api[_-]?key\"?\s*[:=]\s*\"?)([^\s,;\"']+)"),
-    re.compile(r"(?i)(\"?(?:access|refresh|jwt)[_-]?token\"?\s*[:=]\s*\"?)([^\s,;\"']+)"),
+    re.compile(r"(?i)(x-api-key\s*[:=]\s*)(?![{\[])([^\s,;\"']+)"),
+    re.compile(r"(?i)(authorization\s*[:=]\s*(?:bearer\s+)?)(?![{\[])([^\s,;\"']+)"),
+    re.compile(r"(?i)(\"?api[_-]?key\"?\s*[:=]\s*\"?)(?![{\[])([^\s,;\"']+)"),
+    re.compile(r"(?i)(\"?(?:access|refresh|jwt)[_-]?token\"?\s*[:=]\s*\"?)(?![{\[])([^\s,;\"']+)"),
 ]
+
+# Object keys whose string values are credentials.
+_SECRET_KEYS = re.compile(
+    r"(?i)^(x-)?(api[_-]?key|(access|refresh|jwt|auth|tunnel|bearer)?[_-]?token|password|passwd|"
+    r"secret|client[_-]?secret|private[_-]?key)$"
+)
 
 
 class Redactor:
@@ -27,6 +34,7 @@ class Redactor:
         self._secrets = sorted({s for s in (secrets or []) if s and len(s) >= 4}, key=len, reverse=True)
 
     def text(self, value: str) -> str:
+        """Redact free text. Do not use on raw JSON that will be parsed afterwards: use ``obj``."""
         if not value:
             return value
         for s in self._secrets:
@@ -36,13 +44,16 @@ class Redactor:
         return value
 
     def obj(self, value: Any) -> Any:
-        """Recursively redact strings inside JSON-like data."""
+        """Recursively redact parsed JSON: secret-named keys, plus credentials inside any string."""
         if isinstance(value, str):
             return self.text(value)
         if isinstance(value, list):
             return [self.obj(v) for v in value]
         if isinstance(value, dict):
-            return {k: self.obj(v) for k, v in value.items()}
+            return {
+                k: REDACTED if isinstance(v, str) and v and _SECRET_KEYS.match(str(k)) else self.obj(v)
+                for k, v in value.items()
+            }
         return value
 
 

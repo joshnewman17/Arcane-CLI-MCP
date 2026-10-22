@@ -192,8 +192,7 @@ class CliRunner:
         timeout = self.timeout_for(decision.command_path)
         code, stdout, stderr, timed_out = self.exec(self.base_argv() + cmd_args, timeout)
         duration_ms = int((time.monotonic() - started) * 1000)
-        stdout = self.redactor.text(stdout)
-        stderr = self.redactor.text(stderr)
+        stderr = self.redactor.text(stderr)  # stdout is redacted in _shape, after JSON parsing
         result = self._shape(base, code, stdout, stderr, decision.command_path if compact else None)
         if timed_out:
             result.update(ok=False, timed_out=True,
@@ -209,6 +208,7 @@ class CliRunner:
         result: dict[str, Any] = {**base, "ok": code == 0, "exit_code": code}
         parsed, data = parse_json(stdout)
         if parsed:
+            data = self.redactor.obj(data)
             if compact_path is not None:
                 data, compacted = compact_mod.compact(compact_path, data)
                 if compacted:
@@ -216,7 +216,7 @@ class CliRunner:
             data, note = fit_output(data, limit)
             result["data"] = data
         else:
-            result["raw_stdout"], note = truncate_text(strip_ansi(data), limit)
+            result["raw_stdout"], note = truncate_text(strip_ansi(self.redactor.text(data)), limit)
         if note:
             result["truncated"] = True
             result["truncation_note"] = note
@@ -270,9 +270,9 @@ class CliRunner:
 
     def doctor(self) -> dict[str, Any]:
         code, stdout, stderr, timed_out = self.exec(self.base_argv() + ["doctor", "--json"], 30)
-        parsed, data = parse_json(self.redactor.text(stdout))
+        parsed, data = parse_json(stdout)
         return {
             "ok": code == 0 and not timed_out,
-            "doctor": data if parsed else None,
+            "doctor": self.redactor.obj(data) if parsed else None,
             "stderr_tail": tail(self.redactor.text(stderr), 500) or None,
         }

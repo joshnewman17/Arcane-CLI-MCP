@@ -75,3 +75,20 @@ def test_cli_config_file_is_private(tmp_path):
 
     assert yaml.safe_load(path.read_text()) == {
         "server_url": "http://a:1", "api_key": API_KEY, "default_environment": "3", "log_level": "warn"}
+
+
+def test_json_schema_with_secret_named_keys_is_not_corrupted():
+    # Regression: regex redaction on raw JSON turned `"apiKey":{` into `"apiKey":[REDACTED]`.
+    raw = '{"properties":{"apiKey":{"type":"string"},"token":["a"]},"x-api-key":{"in":"header"}}'
+    r = Redactor([API_KEY])
+    assert json.loads(r.text(raw)) == json.loads(raw)
+    assert r.obj(json.loads(raw)) == json.loads(raw)  # non-string values under secret keys are kept
+
+
+def test_obj_redacts_secret_named_keys():
+    r = Redactor([])
+    out = r.obj({"name": "reg", "token": "ghp_abc", "password": "pw", "apiKey": "k", "TUNNEL_TOKEN": "eyJx",
+                 "tokenCount": 3, "keyPrefix": "arc_ab", "nested": [{"client_secret": "s"}], "empty": ""})
+    assert out == {"name": "reg", "token": REDACTED, "password": REDACTED, "apiKey": REDACTED,
+                   "TUNNEL_TOKEN": REDACTED, "tokenCount": 3, "keyPrefix": "arc_ab",
+                   "nested": [{"client_secret": REDACTED}], "empty": ""}

@@ -99,12 +99,13 @@ class ApiClient:
         if 300 <= resp.status_code < 400:
             result["error"] = "Redirects are not followed."
             return result
-        body = self.redactor.text(resp.text)
         try:
-            data, note = fit_output(json.loads(body), self.settings.max_output_chars)
+            # Parse first, then redact the structure: regex redaction on raw JSON can break it.
+            parsed = self.redactor.obj(json.loads(resp.text))
+            data, note = fit_output(parsed, self.settings.max_output_chars)
             result["data"] = data
         except json.JSONDecodeError:
-            result["raw"], note = truncate_text(body, self.settings.max_output_chars)
+            result["raw"], note = truncate_text(self.redactor.text(resp.text), self.settings.max_output_chars)
         if note:
             result["truncated"] = True
             result["truncation_note"] = note

@@ -266,3 +266,11 @@ def test_environments_trimmed(runner, fake_run):
     r = runner.environments()
     assert r == {"ok": True, "default_env_id": "0",
                  "environments": [{"id": "0", "name": "local", "status": "online"}]}
+
+
+def test_json_with_secret_named_object_keys_parses(runner, fake_run):
+    payload = {"data": [{"name": "r", "apiKey": {"type": "string"}, "token": "ghp_secret"}], "pagination": {}}
+    fake_run(stdout=json.dumps(payload))
+    r = runner.run(["registries", "list"])
+    assert "raw_stdout" not in r
+    assert r["data"]["data"][0] == {"name": "r", "apiKey": {"type": "string"}, "token": "[REDACTED]"}
