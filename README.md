@@ -157,6 +157,21 @@ The image runs as `99:100` (`nobody:users`), so appdata permissions work as usua
 box, `ARCANE_URL` is usually `http://<unraid-ip>:3552` (or the container name if both containers
 share a custom network).
 
+## 3b. Deploy through Arcane itself (GitOps)
+
+[`deploy/arcane/compose.yaml`](deploy/arcane/compose.yaml) is meant for an Arcane **Git Sync (pull)**.
+GitHub Actions ([`.github/workflows/image.yml`](.github/workflows/image.yml)) runs the tests and pushes
+`ghcr.io/joshnewman17/arcane-mcp:latest` (amd64 + arm64) on every push to `main`. Arcane then only pulls
+the image, so nothing is built on the host.
+
+1. In Arcane, under **Customization → Git Repositories**, add this repo (HTTP auth with a token that can read it).
+   Make sure the `ghcr.io` registry credential in Arcane can read this repo's package.
+2. Create the sync, either in the UI or through arcane-mcp:
+   `gitops create --name arcane-cli-mcp --project-name arcane-cli-mcp --repo-id <id> --branch main --compose-path deploy/arcane/compose.yaml --auto-sync --interval 5`
+3. In the project's **.env** in Arcane, set `ARCANE_URL`, `ARCANE_API_KEY` and `MCP_AUTH_TOKEN`.
+   Non-secret defaults come from [`deploy/arcane/.env.git`](deploy/arcane/.env.git).
+4. Start the project (`projects up arcane-cli-mcp`) and check `http://<host>:8090/healthz`.
+
 ## 4. Connect Claude
 
 ### claude.ai custom connector
