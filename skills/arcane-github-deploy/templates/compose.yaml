@@ -1,0 +1,24 @@
+# deploy/arcane/compose.yaml: synced by Arcane Git Sync; the image comes from GHCR (built by CI).
+# Replace <owner>, <repo>, <project>, <container-port> and the default host port.
+# Secrets live in the project's .env in Arcane (entered in the UI), never in git.
+services:
+  <project>:
+    image: ghcr.io/<owner>/<repo>:latest
+    container_name: <project>
+    restart: unless-stopped
+    env_file: .env # must exist in Arcane before `projects up`
+    ports:
+      - "${HOST_PORT:-8090}:<container-port>" # check the host port is free first
+    volumes:
+      - data:/data
+    # Hardening; drop anything the image can't run with.
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  data:

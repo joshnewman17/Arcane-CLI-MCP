@@ -217,6 +217,7 @@ In stdio mode, logs and audit lines go to stderr so stdout stays clean for the p
 | [`arcane-vuln-review`](skills/arcane-vuln-review/SKILL.md) | Prioritise critical/high CVEs, recommend update/accept/ignore |
 | [`arcane-disk-cleanup`](skills/arcane-disk-cleanup/SKILL.md) | Measure volumes/images before pruning anything |
 | [`arcane-gitops`](skills/arcane-gitops/SKILL.md) | Inspect and trigger GitOps syncs, follow the activity to completion |
+| [`arcane-github-deploy`](skills/arcane-github-deploy/SKILL.md) | Deploy a GitHub repo as a GitOps-synced project: CI builds to GHCR, Arcane pulls. Includes templates and GHCR `denied` troubleshooting |
 
 To install them: in claude.ai, upload each folder as a zip under **Settings → Capabilities → Skills**.
 In Claude Code, copy them to `~/.claude/skills/` (or a project's `.claude/skills/`).
