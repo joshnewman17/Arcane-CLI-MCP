@@ -56,12 +56,29 @@ async def test_lists_tools_with_examples(e2e):
     async with Client(server) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert set(tools) == {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments",
-                          "arcane_project_compose", "arcane_logs"}
+                          "arcane_project_compose", "arcane_logs", "arcane_playbook"}
     assert set(tools["arcane_project_compose"].input_schema["properties"]) == {"project", "compose", "env_id", "confirm"}
     for t in tools.values():
-        assert "Example" in t.description
+        assert "Example" in t.description or t.name == "arcane_playbook"
     assert "openapi.json" in tools["arcane_api_get"].description
     assert "needs_confirmation" in tools["arcane_run"].description
+
+
+async def test_playbook_tool_and_prompts(e2e):
+    _, server = e2e
+    async with Client(server) as c:
+        listing = (await c.call_tool("arcane_playbook", {})).structured_content
+        names = {p["name"] for p in listing["playbooks"]}
+        assert "arcane-safe-updates" in names and len(names) == 7
+        one = (await c.call_tool("arcane_playbook", {"name": "arcane-github-deploy"})).structured_content
+        assert "needs_confirmation" in (await c.call_tool("arcane_playbook", {"name": "arcane-safe-updates"})).structured_content["playbook"]
+        assert not one["playbook"].startswith("---") and "templates/compose.yaml" in one["playbook"]
+        bad = (await c.call_tool("arcane_playbook", {"name": "nope"})).structured_content
+        assert bad["ok"] is False and bad["playbooks"]
+        prompts = {p.name for p in (await c.list_prompts()).prompts}
+        assert prompts == names
+        got = await c.get_prompt("arcane-gitops")
+        assert "GitOps" in got.messages[0].content.text
 
 
 async def test_environments(e2e):

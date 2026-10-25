@@ -1,0 +1,11 @@
+{
+  "name": "arcane-mcp",
+  "owner": { "name": "joshnewman17" },
+  "plugins": [
+    {
+      "name": "arcane",
+      "source": "./",
+      "description": "Arcane homelab skills for the arcane-cli-mcp server"
+    }
+  ]
+}

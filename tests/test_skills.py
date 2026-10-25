@@ -8,7 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SKILLS = sorted(p for p in (ROOT / "skills").iterdir() if p.is_dir())
-TOOLS = {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments", "arcane_project_compose"}
+TOOLS = {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments", "arcane_project_compose", "arcane_playbook", "arcane_logs"}
 
 
 def frontmatter(path: Path) -> dict:
@@ -77,3 +77,17 @@ def test_readme_project_compose_parses():
     # Secrets go only where they're needed: no env_file, tunnel token only on cloudflared.
     assert "env_file" not in service and "TUNNEL_TOKEN" not in service["environment"]
     assert "ARCANE_API_KEY" not in tunnel["environment"]
+
+
+def test_plugin_manifests():
+    import json
+    plugin = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+    market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+    assert plugin["name"] == "arcane"
+    assert market["plugins"][0]["name"] == plugin["name"] and market["plugins"][0]["source"] == "./"
+
+
+def test_server_serves_the_same_files_as_the_plugin():
+    from arcane_mcp.playbooks import Playbooks, default_root
+    assert default_root() == ROOT / "skills"
+    assert {p.name for p in Playbooks()} == {s.name for s in SKILLS}

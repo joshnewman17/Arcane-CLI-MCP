@@ -29,6 +29,10 @@ arcane-mcp = "arcane_mcp.server:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/arcane_mcp"]
 
+# The playbooks the arcane_playbook tool serves are the same files the Claude plugin ships as skills.
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "arcane_mcp/skills"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["integration: talks to a real Arcane instance (set ARCANE_IT=1)"]
