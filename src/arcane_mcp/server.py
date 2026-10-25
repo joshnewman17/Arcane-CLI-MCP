@@ -57,6 +57,9 @@ Workflow:
 - To change a project's compose file use arcane_project_compose (read it first, then write the full
   file; writes return a diff and need the user's confirmation). Project .env files hold secrets and
   are only edited in the Arcane UI.
+- To create a NEW project use arcane_project_create. Reference every secret or per-site setting as ${VAR};
+  the server generates the .env with CHANGE_ME placeholders, the user fills them in the Arcane UI, and
+  arcane_project_compose reports env_unfilled. Deploy only once env_unfilled is empty.
 """
 
 PLAYBOOK_DESCRIPTION = """\
@@ -73,8 +76,9 @@ Run an arcane-cli command against the Arcane instance and return its JSON output
 `args` is the command and its arguments WITHOUT the binary name. The server adds `--json`, `--env <env_id>`
 (for environment-scoped commands) and, only when confirm=true, `--yes`. Any `--yes`/`-y`/`--force`/`--json`/
 `--output` you pass is stripped. Use `env_id` (an id or an environment name such as "Node804") instead of
-`--env`. Flags that read local files (`--file`, `--env-file`, ...) are rejected. `--help` is answered as
-by arcane_cli_help.
+`--env`. Flags that read local files (`--file`, `--env-file`, ...) are rejected: to create a project use
+arcane_project_create, to change its compose file arcane_project_compose. `--help` is answered as by
+arcane_cli_help.
 
 Result: {ok, exit_code, data, error, stderr_tail, command}. On failure `error` holds the CLI's message.
 List commands return {data, pagination}; use --limit/--start or filters when output is truncated (`--all`
@@ -152,7 +156,8 @@ Read or replace a project's compose file (docker-compose YAML).
 
 - Read: pass only `project`. Returns the current compose file (values that look like secrets are
   hidden as [REDACTED]). The project's .env is never returned: it holds secrets and is edited in the
-  Arcane UI only. Reference its values from compose as ${VAR}.
+  Arcane UI only. Reference its values from compose as ${VAR}. `env_unfilled` lists the .env variables
+  that still hold the CHANGE_ME placeholder (names only); the project must not be deployed until it is empty.
 - Write: pass `project` and `compose` (the COMPLETE new file, not a fragment). Without confirm=true
   nothing changes: the result has needs_confirmation=true and a unified diff. Show the user the diff,
   and only after they approve it, call again with the same compose and confirm=true.
@@ -163,6 +168,28 @@ Examples:
 - {"project": "immich"}                                   (read)
 - {"project": "immich", "compose": "services:\n  ...", "env_id": "0"}   (returns a diff to approve)
 - {"project": "immich", "compose": "services:\n  ...", "confirm": true}  (after the user approved)
+"""
+
+CREATE_DESCRIPTION = """\
+Create a NEW compose project from a compose file, with a generated .env of placeholders.
+
+- `project`: the new project's name. `compose`: the COMPLETE docker-compose YAML.
+- Never put secrets or site-specific values (passwords, tokens, domains, paths) inline: reference them
+  as ${VAR}, ${VAR:-default} or ${VAR:?message}. The server builds the project's .env from those
+  references: the compose default when there is one, otherwise CHANGE_ME. It never takes values from you.
+- `env_hints` ({VAR: "one-line description"}) adds a comment above each variable to tell the user what to
+  enter, and adds variables the compose doesn't reference (e.g. ones only read through env_file).
+- Without confirm=true nothing is created: the result has needs_confirmation=true, the services and the
+  .env that would be written. Show the user, and only after they approve call again with confirm=true.
+- The project is NOT deployed. The user replaces the CHANGE_ME values in the Arcane UI (Projects ->
+  <project> -> .env). Then arcane_project_compose {"project": ...} must show env_unfilled: [] before you
+  run, with their OK, arcane_run ['projects', 'up', <project>].
+- Existing projects are refused: use arcane_project_compose to change them.
+
+Examples:
+- {"project": "paperless", "env_id": "Node804", "compose": "services:\\n  app:\\n    image: ...\\n    environment:\\n      SECRET: ${PAPERLESS_SECRET}\\n",
+   "env_hints": {"PAPERLESS_SECRET": "Long random string (openssl rand -hex 32)"}}   (returns a preview to approve)
+- the same arguments plus "confirm": true   (after the user approved)
 """
 
 LOGS_DESCRIPTION = """\
@@ -310,6 +337,16 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
         if compose is None:
             return as_caller(ctx, lambda: compose_editor.read(project, env_id))
         return as_caller(ctx, lambda: compose_editor.write(project, compose, env_id, confirm))
+
+    @mcp.tool(
+        name="arcane_project_create",
+        description=CREATE_DESCRIPTION,
+        annotations=ToolAnnotations(title="Create a project", destructive_hint=True, open_world_hint=False),
+    )
+    def arcane_project_create(project: str, compose: str, env_id: str | None = None,
+                              env_hints: dict[str, str] | None = None, confirm: bool = False,
+                              ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: compose_editor.create(project, compose, env_id, env_hints, confirm))
 
     @mcp.tool(
         name="arcane_environments",

@@ -279,6 +279,12 @@ FORCE_SHORT_F: frozenset[Path] = frozenset(
         "templates registries delete",
     )
 )
+# Where a dedicated tool replaces a command's local-file flags.
+_FILE_FLAG_ALTERNATIVES: dict[Path, str] = {
+    _p("projects create"): "Use arcane_project_create to create a project from compose content.",
+    _p("projects update"): "Use arcane_project_compose to replace a project's compose file.",
+}
+
 # Commands where ``-f/--file`` is a path inside a remote build context, not a local file.
 REMOTE_FILE_FLAG_OK: frozenset[Path] = frozenset({_p("images build")})
 
@@ -399,7 +405,7 @@ def sanitize_args(args: list[str]) -> tuple[list[str], list[str]]:
         if name in LOCAL_FILE_FLAGS and not (path in REMOTE_FILE_FLAG_OK and name in {"-f", "--file"}):
             raise PolicyError(
                 f"`{name}` reads a file from the MCP server's filesystem, which is not supported. "
-                "Use the Arcane web UI for operations that need local files."
+                + _FILE_FLAG_ALTERNATIVES.get(path, "Use the Arcane web UI for operations that need local files.")
             )
         if name in STRIP_FLAGS or name in STRIP_DIAGNOSTIC_FLAGS:
             stripped.append(tok)

@@ -122,6 +122,16 @@ class ApiClient:
             result["truncation_note"] = note
         return result
 
+    def get_private(self, path: str) -> Any:
+        """GET a validated path and return the parsed JSON WITHOUT redaction.
+
+        For server-side checks only (e.g. which .env placeholders are still unfilled). Never return
+        the result, or anything derived from its values, to a caller.
+        """
+        resp = self._client.get(validate_path(path))
+        resp.raise_for_status()
+        return resp.json()
+
     def stream(self, path: str) -> Any:
         """Open a validated GET as a streaming response (context manager); callers handle errors."""
         return self._client.stream("GET", validate_path(path), timeout=httpx.Timeout(
