@@ -3,6 +3,7 @@ services:
     build:
       context: .
       args:
+        # renovate: datasource=github-releases depName=getarcaneapp/arcane extractVersion=^v(?<version>.+)$
         ARCANE_CLI_VERSION: "2.17.0"
     image: arcane-cli-mcp:local
     container_name: arcane-cli-mcp

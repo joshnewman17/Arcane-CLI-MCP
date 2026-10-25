@@ -412,12 +412,17 @@ The CLI is in early development and renames flags between releases (e.g. `--env`
 `--disabled` → `--enabled=false`, `templates download --output` → `--output-file`; the old names go
 away in v3). To upgrade:
 
+Renovate watches `getarcaneapp/arcane` releases and opens a PR (label `arcane-cli`, never auto-merged) that bumps
+`ARCANE_CLI_VERSION` in the `Dockerfile` and `docker-compose.yml` together. On that PR the `arcane-cli-bump`
+workflow regenerates `tests/fixtures/cli-commands.txt` and comments with the added and removed commands. Pushes made
+with the default `GITHUB_TOKEN` don't trigger CI, so add a `BUMP_TOKEN` secret (a fine-grained PAT or app token with
+`contents: write`) if you want the tests to re-run on that commit. The manual steps, for when you bump by hand:
+
 1. Check the [release notes](https://github.com/getarcaneapp/arcane/releases).
 2. Bump `ARCANE_CLI_VERSION` in the `Dockerfile` and `docker-compose.yml`. Optionally set
    `ARCANE_CLI_SHA256` to the tarball's checksum.
-3. Dump the new command tree (`arcane-cli <group> --help` for every group, or ask Claude to walk
-   `arcane_cli_help`) into `tests/fixtures/cli-commands.txt`. `test_known_commands_match_pinned_cli` fails until
-   `KNOWN_COMMANDS` in `policy.py` matches it exactly.
+3. Regenerate the command tree: `scripts/dump_cli_commands.py /path/to/arcane-cli > tests/fixtures/cli-commands.txt`.
+   `test_known_commands_match_pinned_cli` fails until `KNOWN_COMMANDS` in `policy.py` matches it exactly.
    Review every new path: look for destructive verbs, credential- or settings-related commands (block them),
    and anything that reads a local file, whether as a flag or a positional argument (block it).
 4. Update `policy.py` and the tests, run `pytest`, then push. CI publishes the image, and Arcane picks it up.
