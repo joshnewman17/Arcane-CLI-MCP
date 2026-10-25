@@ -3,7 +3,8 @@
 Arcane only offers ``GET /api/environments/{env}/containers/{id}/logs/download``, which ignores
 ``tail``/``since`` and returns the whole log as text (often megabytes). This module streams that
 response, keeps only the lines the caller asked for (``since``, ``grep``, last ``tail``), strips ANSI
-colour codes and docker's per-line timestamp is kept for ordering. Output is redacted and capped.
+colour codes (docker's per-line timestamp is kept). Output is redacted, best-effort, and capped; the
+tool can be disabled (``LOGS_ENABLED=false``) or kept off chosen containers (``LOGS_EXCLUDE``).
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from typing import Any
 import httpx
 
 from .api import ApiClient, ApiPathError
-from .audit import AuditLog, Redactor
+from .audit import REDACTED, AuditLog, Redactor
 from .cli import CliRunner, strip_ansi
 
 DEFAULT_TAIL = 100
@@ -30,6 +31,12 @@ _ID = re.compile(r"^[0-9a-f]{12,64}$")
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _REL = re.compile(r"^(\d+)\s*([smhdw])$")
 _TS = re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})?\s")
+# Credential-looking `name=value` / `"name":"value"` anywhere in a line (the shared redactor's
+# env-style rule only matches at the start of a line, and log lines start with a timestamp).
+_INLINE_SECRET = re.compile(
+    r"(?i)(\b[\w.-]*(?:token|key|secret|passw(?:or)?d|pwd|credential|cookie|authorization)[\w.-]*[\"']?\s*[=:]\s*)"
+    r"(?!\[REDACTED\])(\"[^\"]*\"|'[^']*'|[^\s,;&]+)"
+)
 _UNITS = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
 
 
@@ -65,6 +72,13 @@ def line_time(line: str) -> datetime | None:
     return base
 
 
+def redact_logs(redactor: Redactor, lines: list[str]) -> list[str]:
+    """Redact the kept lines as one block, so multi-line secrets (PEM keys) are caught whole."""
+    text = redactor.text("\n".join(lines))
+    text = _INLINE_SECRET.sub(lambda m: m.group(1) + REDACTED, text)
+    return text.split("\n") if lines else []
+
+
 class LogCollector:
     def __init__(self, api: ApiClient, runner: CliRunner, redactor: Redactor, audit: AuditLog) -> None:
         self.api = api
@@ -72,6 +86,7 @@ class LogCollector:
         self.redactor = redactor
         self.audit = audit
         self.max_chars = runner.settings.max_output_chars
+        self.exclude = set(runner.settings.logs_exclude)
 
     # -- container lookup ----------------------------------------------------------------------
 
@@ -104,6 +119,9 @@ class LogCollector:
             raise LogError(f"no container matches {ref!r}")
         raise LogError(f"{ref!r} is ambiguous: " + ", ".join(sorted(self._names(c)[0] for c in partial if self._names(c))))
 
+    def _excluded(self, c: dict[str, Any]) -> bool:
+        return any(n.lower() in self.exclude for n in self._names(c))
+
     # -- collection ----------------------------------------------------------------------------
 
     def _collect(self, env: str, container: dict[str, Any], tail: int, since: datetime | None,
@@ -134,7 +152,7 @@ class LogCollector:
                 keep.append(line if len(line) <= MAX_LINE_CHARS else line[:MAX_LINE_CHARS - 1] + "…")
         out: dict[str, Any] = {"container": (self._names(container) or [container["id"][:12]])[0],
                                "id": container["id"][:12], "matched": matched, "returned": len(keep),
-                               "lines": [self.redactor.text(line) for line in keep]}
+                               "lines": redact_logs(self.redactor, list(keep))}
         if truncated_scan:
             out["scan_truncated"] = f"stopped after {MAX_SCAN_BYTES // (1024 * 1024)} MB; use since to narrow"
         return out
@@ -163,15 +181,26 @@ class LogCollector:
             env = self.runner.resolve_env(env_id)
             containers = self._containers(env)
             if container:
-                targets = [self._match(containers, container)]
+                target_c = self._match(containers, container)
+                if self._excluded(target_c):
+                    raise LogError("logs for this container are disabled by LOGS_EXCLUDE")
+                targets = [target_c]
             else:
                 targets = [c for c in containers
                            if (c.get("labels") or {}).get("com.docker.compose.project") == project]
                 if not targets:
                     raise LogError(f"no containers found for project {project!r}")
             note = None
+            if project:
+                kept = [c for c in targets if not self._excluded(c)]
+                if len(kept) < len(targets):
+                    note = f"{len(targets) - len(kept)} container(s) skipped (LOGS_EXCLUDE)"
+                targets = kept
+                if not targets:
+                    raise LogError("logs for every container in this project are disabled by LOGS_EXCLUDE")
             if len(targets) > MAX_PROJECT_CONTAINERS:
-                targets, note = targets[:MAX_PROJECT_CONTAINERS], f"only the first {MAX_PROJECT_CONTAINERS} containers"
+                targets = targets[:MAX_PROJECT_CONTAINERS]
+                note = (note + "; " if note else "") + f"only the first {MAX_PROJECT_CONTAINERS} containers"
             results = [self._collect(env, c, tail, since_at, pattern) for c in targets]
         except (LogError, ApiPathError) as exc:
             self.audit.record(tool="arcane_logs", target=target, outcome="rejected", reason=str(exc))

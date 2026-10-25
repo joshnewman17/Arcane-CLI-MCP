@@ -66,6 +66,10 @@ class Settings:
     self_project: str | None = "arcane-cli-mcp"
     self_containers: tuple[str, ...] = ("arcane-cli-mcp", "arcane-cli-mcp-tunnel")
     self_env: str | None = None  # defaults to default_env
+    # arcane_logs: log text can hold secrets no pattern recognises, so it can be switched off or
+    # kept away from specific containers (case-insensitive names).
+    logs_enabled: bool = True
+    logs_exclude: tuple[str, ...] = ()
 
     @property
     def access_enabled(self) -> bool:
@@ -143,6 +147,8 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
             c.strip() for c in env.get("SELF_CONTAINERS", "arcane-cli-mcp,arcane-cli-mcp-tunnel").split(",") if c.strip()
         ),
         self_env=env.get("SELF_ENV", "").strip() or None,
+        logs_enabled=_bool(env.get("LOGS_ENABLED"), default=True),
+        logs_exclude=tuple(c.strip().lower() for c in env.get("LOGS_EXCLUDE", "").split(",") if c.strip()),
     )
 
 

@@ -109,6 +109,8 @@ takes `--config <path>`. When an `api_key` is set, the CLI ignores saved session
 | `MAX_OUTPUT_CHARS` | Truncation limit for tool results | `40000` |
 | `DEFAULT_TIMEOUT_S` / `LONG_TIMEOUT_S` | Normal / streaming-op timeouts | `120` / `1800` |
 | `AUDIT_LOG_PATH` | JSONL audit log (empty disables the file; stdout always gets it) | `/data/audit.log` |
+| `LOGS_ENABLED` | Register the `arcane_logs` tool. Log text can hold secrets that redaction can't recognise, so turn it off if that's a concern | `true` |
+| `LOGS_EXCLUDE` | Comma-separated container names `arcane_logs` must never read (e.g. auth proxies, password managers, databases) | – |
 | `ARCANE_VERIFY_TLS` | TLS verification for `arcane_api_get` | `true` |
 | `SELF_PROJECT` | The MCP server's own Arcane project, protected from restart/stop (empty disables) | `arcane-cli-mcp` |
 | `SELF_CONTAINERS` | Comma-separated container names also protected (e.g. the tunnel sidecar) | `arcane-cli-mcp,arcane-cli-mcp-tunnel` |

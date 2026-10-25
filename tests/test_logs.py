@@ -136,3 +136,29 @@ def test_audit_records_call(collector, audit_stream):
     collector.collect(container="web", grep="secret-pattern")
     out = audit_stream.getvalue()
     assert '"arcane_logs"' in out and "secret-pattern" not in out
+
+
+def test_inline_and_multiline_secrets(tmp_path, runner, audit_stream):
+    pem = ["-----BEGIN RSA PRIVATE KEY-----", "MIIEowIBAAKCAQEA1234", "abcdefg", "-----END RSA PRIVATE KEY-----"]
+    log = "".join(f"2026-10-24T01:00:0{i}Z {x}\n" for i, x in enumerate(pem))
+    log += ("2026-10-24T02:00:00Z connecting with DB_PASSWORD=hunter2 user=bob\n"
+            '2026-10-24T02:00:01Z body {"password":"s3cret","name":"ok"} client_secret: abc123\n'
+            "2026-10-24T02:00:02Z cache key=ok-value is fine\n")
+
+    def handler(request):
+        if request.url.path.endswith("/logs/download"):
+            return httpx.Response(200, text=log)
+        return httpx.Response(200, json=CONTAINERS)
+
+    out = "\n".join(make(tmp_path, runner, audit_stream, handler).collect(container="web", tail=50)["logs"][0]["lines"])
+    for leaked in ("MIIEowIBAAKCAQEA1234", "abcdefg", "hunter2", "s3cret", "abc123"):
+        assert leaked not in out
+    assert "user=bob" in out and '"name":"ok"' in out
+
+
+def test_logs_exclude(tmp_path, runner, audit_stream):
+    c = make(tmp_path, runner, audit_stream, logs_exclude=("web-db",))
+    r = c.collect(container="web-db")
+    assert r["ok"] is False and "LOGS_EXCLUDE" in r["error"]
+    r = c.collect(project="shop", tail=1)
+    assert [s["container"] for s in r["logs"]] == ["web"] and "skipped" in r["note"]

@@ -38,3 +38,11 @@ def test_api_key_file(tmp_path):
     f.write_text("arc_from_file\n")
     s = load_settings({"ARCANE_URL": "http://a", "ARCANE_API_KEY_FILE": str(f)})
     assert s.arcane_api_key == "arc_from_file"
+
+
+def test_logs_settings():
+    base = {"ARCANE_URL": "http://a", "ARCANE_API_KEY": "k"}
+    s = load_settings(base)
+    assert s.logs_enabled is True and s.logs_exclude == ()
+    s = load_settings({**base, "LOGS_ENABLED": "false", "LOGS_EXCLUDE": " Vaultwarden, oauth2-proxy ,"})
+    assert s.logs_enabled is False and s.logs_exclude == ("vaultwarden", "oauth2-proxy")

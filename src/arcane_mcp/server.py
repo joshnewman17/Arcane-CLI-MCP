@@ -154,6 +154,11 @@ Examples:
 LOGS_DESCRIPTION = """\
 Collect recent logs from a container, or from every container of a compose project. Read-only.
 
+LOGS ARE SENSITIVE. Redaction is best-effort: it catches common token, key, password and URL-credential
+shapes, but cannot recognise every secret or personal data in free text. Request the smallest slice you
+need (a `grep`, a short `since`, a small `tail`), do not repeat log contents beyond what the user needs,
+and never copy anything credential-like you notice into other tools or replies.
+
 Arcane can only download a container's entire log, so the server filters it for you: it keeps the lines
 matching `since` and `grep`, then returns the last `tail` of them (default 100, max 2000), oldest first,
 each prefixed with its timestamp. ANSI colours are stripped and secret-looking values are hidden as
@@ -278,16 +283,17 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     def arcane_environments(ctx: Context | None = None) -> dict[str, Any]:
         return as_caller(ctx, runner.environments)
 
-    @mcp.tool(
-        name="arcane_logs",
-        description=LOGS_DESCRIPTION,
-        annotations=ToolAnnotations(title="Container logs", read_only_hint=True, open_world_hint=False),
-    )
-    def arcane_logs(container: str | None = None, project: str | None = None, env_id: str | None = None,
-                    tail: int = 100, since: str | None = None, grep: str | None = None,
-                    case_sensitive: bool = False, ctx: Context | None = None) -> dict[str, Any]:
-        return as_caller(ctx, lambda: collector.collect(container, project, env_id, tail, since, grep,
-                                                        case_sensitive))
+    if settings.logs_enabled:
+        @mcp.tool(
+            name="arcane_logs",
+            description=LOGS_DESCRIPTION,
+            annotations=ToolAnnotations(title="Container logs", read_only_hint=True, open_world_hint=False),
+        )
+        def arcane_logs(container: str | None = None, project: str | None = None, env_id: str | None = None,
+                        tail: int = 100, since: str | None = None, grep: str | None = None,
+                        case_sensitive: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+            return as_caller(ctx, lambda: collector.collect(container, project, env_id, tail, since, grep,
+                                                            case_sensitive))
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> Response:
