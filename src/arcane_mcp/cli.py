@@ -100,7 +100,7 @@ def fit_output(data: Any, limit: int) -> tuple[Any, str | None]:
         if lo > 0:
             return {**data, "data": items[:lo]}, (
                 f"Output truncated: showing {lo} of {total} items. "
-                "Narrow it with --limit/--start or the command's filter flags (see arcane_help)."
+                "Narrow it with --limit/--start or the command's filter flags (see arcane_cli_help)."
             )
 
     if isinstance(data, list) and data:
@@ -294,8 +294,8 @@ class CliRunner:
         try:
             decision = policy.evaluate(args, confirm=confirm, readonly=self.settings.readonly)
             if decision.help:
-                # Same output as arcane_help (no trailing padding, policy note), without the `--env` noise.
-                return {**self.help(list(decision.command_path)), "note": "Answered by arcane_help."}
+                # Same output as arcane_cli_help (no trailing padding, policy note), without the `--env` noise.
+                return {**self.help(list(decision.command_path)), "note": "Answered by arcane_cli_help."}
             env = self.resolve_env(env_id) if policy.env_scoped(decision.command_path) else None
             audit["env_id"] = env
             if exclude_types and decision.command_path != ("activities", "list"):
@@ -431,14 +431,14 @@ class CliRunner:
                     "words (lowercase letters, digits, '-'), e.g. ['projects', 'destroy']"
                 )
         except policy.PolicyError as exc:
-            self.audit.record(tool="arcane_help", argv=command, outcome="rejected", reason=str(exc))
+            self.audit.record(tool="arcane_cli_help", argv=command, outcome="rejected", reason=str(exc))
             return {"ok": False, "error": str(exc)}
         code, stdout, stderr, timed_out = self.exec(self.base_argv() + list(command) + ["--help"],
                                                     self.settings.default_timeout_s)
         text = strip_ansi(self.redactor.text(stdout or stderr))
         text = "\n".join(line.rstrip() for line in text.splitlines())
         text, note = truncate_text(text.strip(), self.settings.max_output_chars)
-        self.audit.record(tool="arcane_help", argv=command, exit_code=code,
+        self.audit.record(tool="arcane_cli_help", argv=command, exit_code=code,
                           duration_ms=int((time.monotonic() - started) * 1000))
         out: dict[str, Any] = {"ok": code == 0 and not timed_out, "help": text}
         if note:

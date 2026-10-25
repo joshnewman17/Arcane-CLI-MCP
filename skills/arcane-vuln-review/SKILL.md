@@ -5,7 +5,7 @@ description: Review container image vulnerabilities reported by Arcane, prioriti
 
 # Vulnerability review with Arcane
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help`.
+Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`.
 
 ## Ground rules
 - Resolve `env_id` first with `arcane_environments` when more than one environment exists.

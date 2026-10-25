@@ -340,7 +340,7 @@ def test_env_flag_only_when_scoped(runner, cli, args, scoped):
     assert ("--env" in fake.calls[-1]) is scoped
 
 
-def test_help_via_run_is_routed_to_arcane_help(runner, monkeypatch):
+def test_help_via_run_is_routed_to_arcane_cli_help(runner, monkeypatch):
     calls = []
 
     def fake(argv, **kw):

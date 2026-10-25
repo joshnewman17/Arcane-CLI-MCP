@@ -5,13 +5,13 @@ description: Check Docker containers managed by Arcane for newer images and upda
 
 # Safe container updates with Arcane
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help` (arcane-cli-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help` (arcane-cli-mcp server).
 
 ## Ground rules
 - If more than one environment might exist, call `arcane_environments` first, confirm which one with the user, and pass `env_id` on every call.
 - Never bulk-update. One container per approval, one at a time.
 - A result with `needs_confirmation: true` means stop and ask the user. Never retry with `confirm=true` on your own.
-- If a flag is unclear, check `arcane_help` instead of guessing.
+- If a flag is unclear, check `arcane_cli_help` instead of guessing.
 - **Never update the MCP server's own deployment** (project `arcane-cli-mcp` and its tunnel container): it would drop
   this conversation's connection mid-call. Those calls return `self_target: true`. List it as "update from the Arcane
   UI" and move on. Never set `allow_self=true` yourself.

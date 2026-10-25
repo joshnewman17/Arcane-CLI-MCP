@@ -5,7 +5,7 @@ description: Deploy a GitHub repository to an Arcane environment as a regular co
 
 # Deploy a GitHub repo through Arcane (CI + GHCR)
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_project_compose`, `arcane_help`, `arcane_api_get` (arcane-cli-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_project_compose`, `arcane_cli_help`, `arcane_api_get` (arcane-cli-mcp server).
 Templates: `templates/` next to this file.
 
 This pattern has GitHub Actions build the image and push it to GHCR. The project is a normal Arcane
