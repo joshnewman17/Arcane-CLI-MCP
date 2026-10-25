@@ -60,7 +60,7 @@ async def test_lists_tools_with_examples(e2e):
                           "arcane_docs"}
     assert set(tools["arcane_project_compose"].input_schema["properties"]) == {"project", "compose", "env_id", "confirm"}
     assert set(tools["arcane_project_create"].input_schema["properties"]) == {
-        "project", "compose", "env_id", "env_hints", "confirm"}
+        "project", "compose", "env_id", "env_hints", "env_values", "confirm"}
     for t in tools.values():
         assert "Example" in t.description or t.name == "arcane_playbook"
     assert "openapi.json" in tools["arcane_api_get"].description

@@ -17,6 +17,7 @@ from arcane_mcp.compose_edit import (
     PLACEHOLDER,
     ComposeEditor,
     env_template,
+    is_secret_name,
     unfilled,
 )
 
@@ -215,6 +216,50 @@ def test_env_template_rejects_bad_hints(hints):
     with pytest.raises(ValueError):
         env_template(CREATE, hints)
 
+
+
+def test_env_values_fill_non_secrets_and_secrets_stay_placeholders():
+    compose = CREATE + "      DB_PASSWORD: ${DB_PASSWORD:-changeme}\n"
+    env, placeholders = env_template(compose, {"APP_TOKEN": "vendor token"},
+                                     {"DOMAIN": "app.example.com", "TZ": "America/Chicago", "PUID": "99"},
+                                     Redactor([API_KEY]))
+    lines = env.splitlines()
+    assert "DOMAIN=app.example.com" in lines and "TZ=America/Chicago" in lines and "PUID=99" in lines
+    assert "TAG=1.2" in lines  # compose default kept when no value given
+    # Secret-named variables are placeholders, even when the compose has a default.
+    assert f"APP_TOKEN={PLACEHOLDER}" in lines and f"DB_PASSWORD={PLACEHOLDER}" in lines
+    assert placeholders == ["APP_TOKEN", "DB_PASSWORD"]
+
+
+@pytest.mark.parametrize("values,msg", [
+    ({"DB_PASSWORD": "hunter2"}, "looks like a secret"),
+    ({"APP_TOKEN": "x"}, "looks like a secret"),
+    ({"OPENAI_API_KEY": "x"}, "looks like a secret"),
+    ({"DATABASE_URL": "postgres://user:hunter2@db/app"}, "credential"),
+    ({"UPSTREAM": "ghp_" + "a" * 36}, "credential"),
+    ({"MY_VAR": API_KEY}, "credential"),
+    ({"DOMAIN": "two\nlines"}, "single line"),
+])
+def test_env_values_refuse_secrets(values, msg):
+    with pytest.raises(ValueError, match=msg):
+        env_template(CREATE, None, values, Redactor([API_KEY]))
+
+
+@pytest.mark.parametrize("name,secret", [("DB_PASSWORD", True), ("POSTGRES_PASS", True), ("JWT_SECRET", True),
+                                         ("API_KEY", True), ("ENCRYPTION_KEY", True), ("TUNNEL_TOKEN", True),
+                                         ("TZ", False), ("PUID", False), ("DOMAIN", False), ("DATA_PATH", False),
+                                         ("KEYBOARD_LAYOUT", False)])
+def test_secret_names(name, secret):
+    assert is_secret_name(name) is secret
+
+
+def test_create_with_env_values(setup):
+    editor, fake, _, _ = setup()
+    r = editor.create("newapp", CREATE, "0", env_values={"DOMAIN": "app.example.com"}, confirm=True)
+    assert r["ok"] and r["placeholders"] == ["APP_TOKEN"]
+    assert "DOMAIN=app.example.com" in fake.uploaded_env and f"APP_TOKEN={PLACEHOLDER}" in fake.uploaded_env
+    r = editor.create("newapp", CREATE, "0", env_values={"APP_TOKEN": "abc"})
+    assert r["ok"] is False and "looks like a secret" in r["error"]
 
 def test_unfilled_names_only():
     assert unfilled(f"# c\nA={PLACEHOLDER}\nB=real\nexport C=\"{PLACEHOLDER}\"\nD=\n") == ["A", "C"]

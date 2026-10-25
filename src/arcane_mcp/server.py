@@ -57,9 +57,9 @@ Workflow:
 - To change a project's compose file use arcane_project_compose (read it first, then write the full
   file; writes return a diff and need the user's confirmation). Project .env files hold secrets and
   are only edited in the Arcane UI.
-- To create a NEW project use arcane_project_create. Reference every secret or per-site setting as ${VAR};
-  the server generates the .env with CHANGE_ME placeholders, the user fills them in the Arcane UI, and
-  arcane_project_compose reports env_unfilled. Deploy only once env_unfilled is empty.
+- To create a NEW project use arcane_project_create. Reference every setting as ${VAR}; fill non-secret
+  values with env_values. Credentials are always written as CHANGE_ME, the user fills them in the Arcane
+  UI, and arcane_project_compose reports env_unfilled. Deploy only once env_unfilled is empty.
 """
 
 PLAYBOOK_DESCRIPTION = """\
@@ -174,11 +174,16 @@ CREATE_DESCRIPTION = """\
 Create a NEW compose project from a compose file, with a generated .env of placeholders.
 
 - `project`: the new project's name. `compose`: the COMPLETE docker-compose YAML.
-- Never put secrets or site-specific values (passwords, tokens, domains, paths) inline: reference them
-  as ${VAR}, ${VAR:-default} or ${VAR:?message}. The server builds the project's .env from those
-  references: the compose default when there is one, otherwise CHANGE_ME. It never takes values from you.
-- `env_hints` ({VAR: "one-line description"}) adds a comment above each variable to tell the user what to
-  enter, and adds variables the compose doesn't reference (e.g. ones only read through env_file).
+- Reference every setting from compose as ${VAR}, ${VAR:-default} or ${VAR:?message}; never inline a
+  secret. The server builds the project's .env from those references.
+- `env_values` ({VAR: "value"}) fills NON-SECRET settings you know: TZ, PUID/PGID, domains, host paths,
+  ports, image tags. Never put passwords, tokens, API keys or other credentials there: keys whose name
+  looks like a credential (PASSWORD, TOKEN, SECRET, API_KEY, ..._KEY, AUTH, SALT, ...) or values that
+  look like one are refused, and such variables are always written as CHANGE_ME for the user to fill in.
+  Other variables without a value get the compose default, else CHANGE_ME.
+- `env_hints` ({VAR: "one-line description"}) adds a comment above a variable telling the user what to
+  enter (use it for every CHANGE_ME). Keys in env_values or env_hints that the compose doesn't reference
+  (e.g. ones read through env_file) are added too.
 - Without confirm=true nothing is created: the result has needs_confirmation=true, the services and the
   .env that would be written. Show the user, and only after they approve call again with confirm=true.
 - The project is NOT deployed. The user replaces the CHANGE_ME values in the Arcane UI (Projects ->
@@ -344,9 +349,10 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
         annotations=ToolAnnotations(title="Create a project", destructive_hint=True, open_world_hint=False),
     )
     def arcane_project_create(project: str, compose: str, env_id: str | None = None,
-                              env_hints: dict[str, str] | None = None, confirm: bool = False,
-                              ctx: Context | None = None) -> dict[str, Any]:
-        return as_caller(ctx, lambda: compose_editor.create(project, compose, env_id, env_hints, confirm))
+                              env_hints: dict[str, str] | None = None, env_values: dict[str, str] | None = None,
+                              confirm: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: compose_editor.create(project, compose, env_id, env_hints, env_values,
+                                                            confirm))
 
     @mcp.tool(
         name="arcane_environments",

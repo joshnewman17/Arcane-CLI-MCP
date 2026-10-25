@@ -44,10 +44,11 @@ Registry credentials shouldn't pass through you, so step 1 happens in the UI (te
    - The registry's "Repository Names" field only matters for pushing from the build page. It doesn't affect pulls.
    - "Pull usage" counts successful pulls only. Public images succeed with any token, so a non-zero count doesn't prove private access works.
 2. **Create the project** with `arcane_project_create {"project": "<project>", "compose": "<Phase 2 file>",
-   "env_id": "<env>", "env_hints": {"<KEY>": "<what to enter>", ...}}`. With `env_file: .env` the compose has no
-   `${VAR}` references, so list **every** `.env` key in `env_hints` (keys the compose does reference are found
-   automatically). Show the user the preview (services and generated `.env`), and only after they approve call
-   again with `confirm=true`. Never put real values in the compose or the hints.
+   "env_id": "<env>", "env_values": {"TZ": "...", "DOMAIN": "..."}, "env_hints": {"<SECRET_KEY>": "<what to enter>"}}`.
+   Fill the non-secret settings you know (TZ, PUID/PGID, domains, paths, ports) in `env_values`; credentials are
+   refused there and always become `CHANGE_ME`, so give each of those an `env_hints` line. With `env_file: .env`
+   the compose has no `${VAR}` references, so every `.env` key must appear in one of the two maps. Show the user
+   the preview (services and generated `.env`), and only after they approve call again with `confirm=true`.
 3. **The user fills in the `.env`** in the Arcane UI (Projects → `<project>` → `.env`), replacing every `CHANGE_ME`.
    Then `arcane_project_compose {"project": "<project>"}` must show `env_unfilled: []`. If not, tell them which
    keys are left and wait. Later compose changes go through `arcane_project_compose`
