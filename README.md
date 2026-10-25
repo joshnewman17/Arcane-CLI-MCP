@@ -2,8 +2,8 @@
 
 A small, self-hosted **remote MCP server** that lets Claude manage a Docker homelab through
 [Arcane](https://getarcane.app). It wraps the official `arcane-cli` (pinned and baked into the
-image) instead of calling the REST API endpoint by endpoint. It exposes four generic tools, and the
-safe operational workflows live in [skills](#skills).
+image) instead of calling the REST API endpoint by endpoint. It exposes a few generic tools, and the
+safe operational workflows ship with it as [playbooks](#skills).
 
 ```
 Claude (claude.ai connector / Claude Code)
@@ -25,6 +25,7 @@ Arcane instance (LAN)
 | `arcane_api_get(path, query?, fields?, compact=true)` | Read-only `GET /api/...` escape hatch for data the CLI doesn't expose. The spec lives at `/api/openapi.json`. `fields` keeps only the named (dotted) fields; `compact` reuses the list summaries for matching paths. |
 | `arcane_environments()` | `{id, name, status}` for each environment, so Claude can pick an `env_id`. Every tool accepts the environment's id or its name; an unknown one is rejected with the list of known environments (cached for 5 minutes). |
 | `arcane_logs(container? \| project?, env_id?, tail=100, since?, grep?, case_sensitive=false)` | Read-only log collection for one container (name or id) or every container of a compose project. Arcane can only download a whole log, so the server streams it and returns just the last `tail` lines (max 2000) that match `since` (`30m`, `2h`, `1d` or ISO-8601) and `grep` (regex). ANSI codes are stripped, secrets redacted, and the oldest lines dropped if the output is too large. |
+| `arcane_playbook(name?)` | Lists the bundled playbooks (with when to use each), or returns one in full. The server's instructions and this tool's description tell Claude to call it before updates, cleanup, CVE review, GitOps syncs, triage or GitHub deploys. The same playbooks are also exposed as MCP prompts (slash commands in clients that support them). |
 | `arcane_project_compose(project, compose?, env_id?, confirm=false)` | Reads a project's compose file, or replaces it with the full new content. A write first returns `needs_confirmation` with a diff, and only runs with `confirm=true`. The project's `.env` is never read or written here, and nothing is redeployed. |
 
 ### Safety model (enforced in code: [`policy.py`](src/arcane_mcp/policy.py))
@@ -331,8 +332,19 @@ In stdio mode, logs and audit lines go to stderr so stdout stays clean for the p
 | [`arcane-health-check`](skills/arcane-health-check/SKILL.md) | One read-only pass: environments, failed activities/jobs (no noise), unhealthy containers, pending updates. Good as a scheduled morning check |
 | [`arcane-github-deploy`](skills/arcane-github-deploy/SKILL.md) | Deploy a GitHub repo as a regular Arcane project: CI builds to GHCR, Arcane pulls. Includes templates and GHCR `denied` troubleshooting |
 
-To install them: in claude.ai, upload each folder as a zip under **Settings → Capabilities → Skills**.
-In Claude Code, copy them to `~/.claude/skills/` (or a project's `.claude/skills/`).
+The same files reach Claude three ways, so the server connection alone is enough:
+
+- **Over MCP (any client, including claude.ai):** the server serves them through `arcane_playbook` and as
+  MCP prompts. The image bundles `skills/`, so there is nothing to install.
+- **Claude plugin (Claude Code / desktop Code tab):** installs all seven as native skills at once.
+  ```
+  /plugin marketplace add joshnewman17/arcane-mcp
+  /plugin install arcane@arcane-mcp
+  ```
+  The plugin ships skills only. Add the server itself with your own URL and credentials (see
+  [Connect Claude](#4-connect-claude)), since a private homelab URL doesn't belong in a public repo.
+- **Manually:** upload each folder as a zip under claude.ai **Settings → Capabilities → Skills**, or copy
+  them to `~/.claude/skills/`.
 
 All of them resolve `env_id` first, treat `needs_confirmation` as "stop and ask", and suggest
 recording significant changes in your Obsidian homelab docs.

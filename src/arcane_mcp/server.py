@@ -28,6 +28,7 @@ from .cli import CliRunner
 from .compose_edit import ComposeEditor
 from .config import ConfigError, Settings, load_settings, write_cli_config
 from .logs import LogCollector
+from .playbooks import Playbooks
 
 log = logging.getLogger("arcane_mcp")
 
@@ -49,9 +50,19 @@ Workflow:
   generate). Tell the user to do those in the Arcane web UI.
 - self_target=true means the command would restart this MCP server (its own project or containers) and
   the call would drop. Recommend the Arcane UI; never set allow_self=true on your own initiative.
+- For updates, cleanup, vulnerability review, health checks, GitOps syncs, broken-stack triage or deploying a
+  GitHub repo, call arcane_playbook first and follow the playbook it returns.
 - To change a project's compose file use arcane_project_compose (read it first, then write the full
   file; writes return a diff and need the user's confirmation). Project .env files hold secrets and
   are only edited in the Arcane UI.
+"""
+
+PLAYBOOK_DESCRIPTION = """\
+Safe step-by-step workflows for this Arcane homelab. Call it BEFORE starting any of these tasks:
+checking or applying image/container updates, project triage (broken or unhealthy stacks), vulnerability
+review, disk cleanup or pruning, GitOps syncs, a read-only health check, or deploying a GitHub repo as a
+project. With no `name` it lists the playbooks and when to use each; with a `name` it returns the full
+playbook to follow. They encode the confirmation rules (one change at a time, stop on needs_confirmation).
 """
 
 RUN_DESCRIPTION = """\
@@ -206,7 +217,7 @@ class HealthCache:
 
 
 def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiClient | None = None,
-                 audit_stream: TextIO | None = None) -> MCPServer:
+                 audit_stream: TextIO | None = None, playbooks: Playbooks | None = None) -> MCPServer:
     redactor = Redactor(settings.secrets())
     audit = AuditLog(settings.audit_log_path, redactor, audit_stream)
     runner = runner or CliRunner(settings, redactor, audit)
@@ -215,6 +226,7 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     compose_editor = ComposeEditor(runner, api, redactor, audit)
     collector = LogCollector(api, runner, redactor, audit)
 
+    playbooks = playbooks if playbooks is not None else Playbooks()
     mcp = MCPServer(name="arcane-cli-mcp", version=__version__, instructions=INSTRUCTIONS)
 
     def as_caller(ctx: Context | None, fn: Callable[[], T]) -> T:
@@ -294,6 +306,20 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
                         case_sensitive: bool = False, ctx: Context | None = None) -> dict[str, Any]:
             return as_caller(ctx, lambda: collector.collect(container, project, env_id, tail, since, grep,
                                                             case_sensitive))
+
+    if playbooks:
+        @mcp.tool(
+            name="arcane_playbook",
+            description=PLAYBOOK_DESCRIPTION,
+            annotations=ToolAnnotations(title="Arcane playbooks", read_only_hint=True, open_world_hint=False),
+        )
+        def arcane_playbook(name: str | None = None) -> dict[str, Any]:
+            return playbooks.get(name)
+
+        for playbook in playbooks:
+            def make(name: str = playbook.name) -> Callable[[], str]:
+                return lambda: playbooks.text(name) or ""
+            mcp.prompt(name=playbook.name, description=playbook.description)(make())
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> Response:

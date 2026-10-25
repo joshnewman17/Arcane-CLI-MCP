@@ -1,0 +1,9 @@
+{
+  "name": "arcane",
+  "version": "0.1.0",
+  "description": "Safe operational workflows (updates, triage, CVE review, cleanup, GitOps, health checks, GitHub deploys) for managing a Docker homelab through the arcane-cli-mcp server.",
+  "author": { "name": "joshnewman17" },
+  "homepage": "https://github.com/joshnewman17/arcane-mcp",
+  "repository": "https://github.com/joshnewman17/arcane-mcp",
+  "license": "MIT"
+}

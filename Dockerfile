@@ -27,6 +27,7 @@ ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 WORKDIR /src
 COPY pyproject.toml README.md ./
 COPY src ./src
+COPY skills ./skills
 # The venv gets no pip of its own; the base image's pip installs into it. pip is a build tool
 # with its own CVEs and is never needed at runtime, so it must not reach the final image.
 RUN python -m venv --without-pip /opt/venv \
