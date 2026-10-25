@@ -5,7 +5,7 @@ description: Deploy a GitHub repository to an Arcane environment as a regular co
 
 # Deploy a GitHub repo through Arcane (CI + GHCR)
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_project_compose`, `arcane_cli_help`, `arcane_api_get` (arcane-cli-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_project_create`, `arcane_project_compose`, `arcane_cli_help`, `arcane_api_get` (arcane-cli-mcp server).
 Templates: `templates/` next to this file.
 
 This pattern has GitHub Actions build the image and push it to GHCR. The project is a normal Arcane
@@ -23,7 +23,7 @@ the deployment lives in git except the CI workflow.
    Start from `templates/github-workflow.yml`. It uses only `GITHUB_TOKEN`.
 2. Push, then confirm CI is green and the image was pushed. The run log has "pushing manifest for ghcr.io/<owner>/<repo>:latest@sha256:...". Note the digest.
 
-## Phase 2: Compose file (you draft it, the user pastes it)
+## Phase 2: Compose file (you draft it)
 Fill in `templates/compose.yaml`:
 - `image: ghcr.io/<owner>/<repo>:latest`. No `build:`.
 - `env_file: .env`. The project `.env` must exist before `up`.
@@ -33,9 +33,8 @@ Fill in `templates/compose.yaml`:
 
 Show the user the final compose file and the list of `.env` keys they need. Values stay with them.
 
-## Phase 3: Arcane setup (user does this in the UI; tell them exactly what to do)
-`projects create -f <file>` is blocked through arcane-cli-mcp because it reads a local file, and registry
-credentials shouldn't pass through you. So these steps happen in the UI:
+## Phase 3: Arcane setup
+Registry credentials shouldn't pass through you, so step 1 happens in the UI (tell the user exactly what to do):
 
 1. **Customization → Container Registries → ghcr.io** (only needed for private images). This must be a **classic** PAT with **`read:packages`**:
    - GHCR does **not** accept fine-grained tokens.
@@ -44,8 +43,15 @@ credentials shouldn't pass through you. So these steps happen in the UI:
    - Best practice: a separate pull-only token (`read:packages` only) for the registry entry.
    - The registry's "Repository Names" field only matters for pushing from the build page. It doesn't affect pulls.
    - "Pull usage" counts successful pulls only. Public images succeed with any token, so a non-zero count doesn't prove private access works.
-2. **Projects → Create:** the project name, the compose file from Phase 2, and the `.env` with the secret values.
-   Creating a project needs the UI. After that, compose changes can go through `arcane_project_compose`
+2. **Create the project** with `arcane_project_create {"project": "<project>", "compose": "<Phase 2 file>",
+   "env_id": "<env>", "env_values": {"TZ": "...", "DOMAIN": "..."}, "env_hints": {"<SECRET_KEY>": "<what to enter>"}}`.
+   Fill the non-secret settings you know (TZ, PUID/PGID, domains, paths, ports) in `env_values`; credentials are
+   refused there and always become `CHANGE_ME`, so give each of those an `env_hints` line. With `env_file: .env`
+   the compose has no `${VAR}` references, so every `.env` key must appear in one of the two maps. Show the user
+   the preview (services and generated `.env`), and only after they approve call again with `confirm=true`.
+3. **The user fills in the `.env`** in the Arcane UI (Projects → `<project>` → `.env`), replacing every `CHANGE_ME`.
+   Then `arcane_project_compose {"project": "<project>"}` must show `env_unfilled: []`. If not, tell them which
+   keys are left and wait. Later compose changes go through `arcane_project_compose`
    (diff → user approval → `confirm=true`), while the `.env` always stays in the UI.
 
 ## Phase 4: Deploy (through arcane-cli-mcp)

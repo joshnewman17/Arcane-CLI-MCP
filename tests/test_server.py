@@ -56,8 +56,11 @@ async def test_lists_tools_with_examples(e2e):
     async with Client(server) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert set(tools) == {"arcane_run", "arcane_cli_help", "arcane_api_get", "arcane_environments",
-                          "arcane_project_compose", "arcane_logs", "arcane_playbook", "arcane_docs"}
+                          "arcane_project_compose", "arcane_project_create", "arcane_logs", "arcane_playbook",
+                          "arcane_docs"}
     assert set(tools["arcane_project_compose"].input_schema["properties"]) == {"project", "compose", "env_id", "confirm"}
+    assert set(tools["arcane_project_create"].input_schema["properties"]) == {
+        "project", "compose", "env_id", "env_hints", "env_values", "confirm"}
     for t in tools.values():
         assert "Example" in t.description or t.name == "arcane_playbook"
     assert "openapi.json" in tools["arcane_api_get"].description
