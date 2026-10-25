@@ -1,0 +1,84 @@
+name: arcane-cli-bump
+
+# Runs on Renovate's arcane-cli bump PRs. Rebuilds tests/fixtures/cli-commands.txt from the new CLI's
+# --help and reports which commands were added or removed, so the policy.py review is a short diff.
+# test_known_commands_match_pinned_cli then fails until policy.KNOWN_COMMANDS matches.
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fixture:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'renovate/')
+    runs-on: ubuntu-latest
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Pushes made with GITHUB_TOKEN don't trigger other workflows, so the fixture commit would not
+      # re-run the tests. Set a BUMP_TOKEN secret (fine-grained PAT or app token with contents:write)
+      # to get a CI run on it.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.BUMP_TOKEN || github.token }}
+
+      - name: Install the pinned arcane-cli
+        run: |
+          version="$(sed -n 's/^ARG ARCANE_CLI_VERSION=//p' Dockerfile | head -n1)"
+          curl -fsSL -o "$RUNNER_TEMP/cli.tgz" \
+            "https://github.com/getarcaneapp/arcane/releases/download/v${version}/arcane-cli_linux_amd64.tar.gz"
+          mkdir "$RUNNER_TEMP/cli"
+          tar -xzf "$RUNNER_TEMP/cli.tgz" -C "$RUNNER_TEMP/cli" arcane-cli
+          echo "ARCANE_CLI=$RUNNER_TEMP/cli/arcane-cli" >> "$GITHUB_ENV"
+
+      - name: Regenerate the command fixture
+        run: |
+          cp tests/fixtures/cli-commands.txt "$RUNNER_TEMP/before.txt"
+          python3 scripts/dump_cli_commands.py "$ARCANE_CLI" > tests/fixtures/cli-commands.txt
+          {
+            echo "<!-- arcane-cli-bump -->"
+            echo "### arcane-cli command tree"
+            if diff <(grep -v '^#' "$RUNNER_TEMP/before.txt") <(grep -v '^#' tests/fixtures/cli-commands.txt) > "$RUNNER_TEMP/tree.diff"; then
+              echo "Unchanged. No new, removed or renamed commands."
+            else
+              echo "Commands changed. \`policy.KNOWN_COMMANDS\` must be updated before the tests pass."
+              echo
+              echo "Review each **added** path: block anything credential- or settings-related, require"
+              echo "\`confirm\` for destructive verbs, and block anything that reads or writes a local file."
+              echo "For **removed** paths, drop their policy rules. For flag changes, check \`arcane_cli_help\`."
+              echo
+              echo '```diff'
+              grep '^[<>]' "$RUNNER_TEMP/tree.diff" | sed 's/^< /- /; s/^> /+ /'
+              echo '```'
+            fi
+          } > "$RUNNER_TEMP/comment.md"
+
+      - name: Commit the fixture
+        run: |
+          if git diff --quiet tests/fixtures/cli-commands.txt; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Regenerate cli-commands.txt for the bumped arcane-cli" tests/fixtures/cli-commands.txt
+          git push origin "HEAD:$HEAD_REF"
+
+      - name: Report the command changes on the PR
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          existing="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- arcane-cli-bump -->"))][0].id // empty')"
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@"$RUNNER_TEMP/comment.md"
+          else
+            gh pr comment "$PR" --body-file "$RUNNER_TEMP/comment.md"
+          fi

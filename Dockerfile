@@ -4,6 +4,7 @@ ARG PYTHON_VERSION=3.12
 
 # --- 1. Fetch the pinned arcane-cli release ------------------------------------
 FROM debian:bookworm-slim AS cli
+# renovate: datasource=github-releases depName=getarcaneapp/arcane extractVersion=^v(?<version>.+)$
 ARG ARCANE_CLI_VERSION=2.17.0
 # Optional: pin the tarball checksum, e.g. --build-arg ARCANE_CLI_SHA256=<sha256 of arcane-cli_linux_amd64.tar.gz>
 ARG ARCANE_CLI_SHA256=""
@@ -35,6 +36,7 @@ RUN python -m venv --without-pip /opt/venv \
 
 # --- 3. Runtime ------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim
+# renovate: datasource=github-releases depName=getarcaneapp/arcane extractVersion=^v(?<version>.+)$
 ARG ARCANE_CLI_VERSION=2.17.0
 # Unraid convention: nobody:users (99:100), so /data on the array is writable.
 ARG PUID=99

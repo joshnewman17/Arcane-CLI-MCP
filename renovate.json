@@ -8,5 +8,27 @@
       "/(^|/)\\.github/workflows/[^/]+\\.ya?ml$/",
       "/^skills/.+/templates/.+\\.ya?ml$/"
     ]
-  }
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "arcane-cli version pinned in the Dockerfile and docker-compose.yml",
+      "managerFilePatterns": [
+        "/^Dockerfile$/",
+        "/^docker-compose\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) extractVersion=(?<extractVersion>\\S+)\\s+(?:ARG\\s+)?ARCANE_CLI_VERSION[=:]\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "arcane-cli bumps change the command tree and need a policy review, so never auto-merge",
+      "matchDepNames": ["getarcaneapp/arcane"],
+      "addLabels": ["arcane-cli"],
+      "automerge": false,
+      "commitMessageTopic": "arcane-cli"
+    }
+  ]
 }
