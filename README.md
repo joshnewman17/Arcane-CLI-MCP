@@ -24,6 +24,7 @@ Arcane instance (LAN)
 | `arcane_help(command=[])` | `arcane-cli <command> --help`, so Claude can discover flags instead of guessing. Tokens must be subcommand words; unknown subcommands get a warning. |
 | `arcane_api_get(path, query?, fields?, compact=true)` | Read-only `GET /api/...` escape hatch for data the CLI doesn't expose. The spec lives at `/api/openapi.json`. `fields` keeps only the named (dotted) fields; `compact` reuses the list summaries for matching paths. |
 | `arcane_environments()` | `{id, name, status}` for each environment, so Claude can pick an `env_id`. Every tool accepts the environment's id or its name; an unknown one is rejected with the list of known environments (cached for 5 minutes). |
+| `arcane_logs(container? \| project?, env_id?, tail=100, since?, grep?, case_sensitive=false)` | Read-only log collection for one container (name or id) or every container of a compose project. Arcane can only download a whole log, so the server streams it and returns just the last `tail` lines (max 2000) that match `since` (`30m`, `2h`, `1d` or ISO-8601) and `grep` (regex). ANSI codes are stripped, secrets redacted, and the oldest lines dropped if the output is too large. |
 | `arcane_project_compose(project, compose?, env_id?, confirm=false)` | Reads a project's compose file, or replaces it with the full new content. A write first returns `needs_confirmation` with a diff, and only runs with `confirm=true`. The project's `.env` is never read or written here, and nothing is redeployed. |
 
 ### Safety model (enforced in code: [`policy.py`](src/arcane_mcp/policy.py))
@@ -108,6 +109,8 @@ takes `--config <path>`. When an `api_key` is set, the CLI ignores saved session
 | `MAX_OUTPUT_CHARS` | Truncation limit for tool results | `40000` |
 | `DEFAULT_TIMEOUT_S` / `LONG_TIMEOUT_S` | Normal / streaming-op timeouts | `120` / `1800` |
 | `AUDIT_LOG_PATH` | JSONL audit log (empty disables the file; stdout always gets it) | `/data/audit.log` |
+| `LOGS_ENABLED` | Register the `arcane_logs` tool. Log text can hold secrets that redaction can't recognise, so turn it off if that's a concern | `true` |
+| `LOGS_EXCLUDE` | Comma-separated container names `arcane_logs` must never read (e.g. auth proxies, password managers, databases) | – |
 | `ARCANE_VERIFY_TLS` | TLS verification for `arcane_api_get` | `true` |
 | `SELF_PROJECT` | The MCP server's own Arcane project, protected from restart/stop (empty disables) | `arcane-cli-mcp` |
 | `SELF_CONTAINERS` | Comma-separated container names also protected (e.g. the tunnel sidecar) | `arcane-cli-mcp,arcane-cli-mcp-tunnel` |

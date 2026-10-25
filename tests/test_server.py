@@ -44,12 +44,19 @@ async def call(server, name, args=None):
         return r.structured_content
 
 
+async def test_logs_tool_can_be_disabled(tmp_path):
+    server = build_server(make_settings(tmp_path, logs_enabled=False))
+    async with Client(server) as c:
+        names = {t.name for t in (await c.list_tools()).tools}
+    assert "arcane_logs" not in names and "arcane_run" in names
+
+
 async def test_lists_tools_with_examples(e2e):
     _, server = e2e
     async with Client(server) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert set(tools) == {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments",
-                          "arcane_project_compose"}
+                          "arcane_project_compose", "arcane_logs"}
     assert set(tools["arcane_project_compose"].input_schema["properties"]) == {"project", "compose", "env_id", "confirm"}
     for t in tools.values():
         assert "Example" in t.description
