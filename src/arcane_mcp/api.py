@@ -122,5 +122,10 @@ class ApiClient:
             result["truncation_note"] = note
         return result
 
+    def stream(self, path: str) -> Any:
+        """Open a validated GET as a streaming response (context manager); callers handle errors."""
+        return self._client.stream("GET", validate_path(path), timeout=httpx.Timeout(
+            self.settings.default_timeout_s, connect=10, read=120))
+
     def close(self) -> None:
         self._client.close()

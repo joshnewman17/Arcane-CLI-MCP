@@ -49,7 +49,7 @@ async def test_lists_tools_with_examples(e2e):
     async with Client(server) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
     assert set(tools) == {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments",
-                          "arcane_project_compose"}
+                          "arcane_project_compose", "arcane_logs"}
     assert set(tools["arcane_project_compose"].input_schema["properties"]) == {"project", "compose", "env_id", "confirm"}
     for t in tools.values():
         assert "Example" in t.description

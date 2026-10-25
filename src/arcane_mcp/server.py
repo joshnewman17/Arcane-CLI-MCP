@@ -27,6 +27,7 @@ from .audit import AuditLog, Redactor, current_user
 from .cli import CliRunner
 from .compose_edit import ComposeEditor
 from .config import ConfigError, Settings, load_settings, write_cli_config
+from .logs import LogCollector
 
 log = logging.getLogger("arcane_mcp")
 
@@ -150,6 +151,30 @@ Examples:
 - {"project": "immich", "compose": "services:\n  ...", "confirm": true}  (after the user approved)
 """
 
+LOGS_DESCRIPTION = """\
+Collect recent logs from a container, or from every container of a compose project. Read-only.
+
+Arcane can only download a container's entire log, so the server filters it for you: it keeps the lines
+matching `since` and `grep`, then returns the last `tail` of them (default 100, max 2000), oldest first,
+each prefixed with its timestamp. ANSI colours are stripped and secret-looking values are hidden as
+[REDACTED]. If the output is too large the oldest lines are dropped (see `truncated`); narrow with
+since/grep rather than raising tail.
+
+- container: name (exact, else unique substring) or id. Pass this or `project`, not both.
+- project: compose project name; returns one section per container (at most 12).
+- since: relative age ("30m", "2h", "1d") or an ISO-8601 timestamp.
+- grep: regular expression, case-insensitive unless case_sensitive=true (e.g. "error|exception|panic").
+- env_id: environment id or name; see arcane_environments.
+
+Result: {ok, env_id, logs: [{container, id, matched, returned, lines}]}. `matched` counts every line that
+passed the filters, so matched > returned means older matches were cut.
+
+Examples:
+- {"container": "Immich_server", "tail": 200}
+- {"container": "SearXNG", "since": "1h", "grep": "error|warn"}
+- {"project": "immich", "since": "30m", "env_id": "Node804"}
+"""
+
 ENV_DESCRIPTION = """\
 List Arcane environments (Docker hosts) as a small payload of {id, name, status}, plus the server's
 default env_id. Call this first and pass the chosen id (or the environment's name) as `env_id` to
@@ -183,6 +208,7 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     api = api or ApiClient(settings, redactor, audit)
     health = HealthCache(runner)
     compose_editor = ComposeEditor(runner, api, redactor, audit)
+    collector = LogCollector(api, runner, redactor, audit)
 
     mcp = MCPServer(name="arcane-cli-mcp", version=__version__, instructions=INSTRUCTIONS)
 
@@ -251,6 +277,17 @@ def build_server(settings: Settings, runner: CliRunner | None = None, api: ApiCl
     )
     def arcane_environments(ctx: Context | None = None) -> dict[str, Any]:
         return as_caller(ctx, runner.environments)
+
+    @mcp.tool(
+        name="arcane_logs",
+        description=LOGS_DESCRIPTION,
+        annotations=ToolAnnotations(title="Container logs", read_only_hint=True, open_world_hint=False),
+    )
+    def arcane_logs(container: str | None = None, project: str | None = None, env_id: str | None = None,
+                    tail: int = 100, since: str | None = None, grep: str | None = None,
+                    case_sensitive: bool = False, ctx: Context | None = None) -> dict[str, Any]:
+        return as_caller(ctx, lambda: collector.collect(container, project, env_id, tail, since, grep,
+                                                        case_sensitive))
 
     @mcp.custom_route("/healthz", methods=["GET"], include_in_schema=False)
     async def healthz(request: Request) -> Response:
