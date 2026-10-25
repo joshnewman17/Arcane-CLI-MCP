@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -70,6 +71,12 @@ class Settings:
     # kept away from specific containers (case-insensitive names).
     logs_enabled: bool = True
     logs_exclude: tuple[str, ...] = ()
+    # arcane_docs: reads the upstream docs repository on GitHub (outbound internet needed).
+    docs_enabled: bool = True
+    docs_cache_ttl_s: int = 3600
+    docs_repo: str = "getarcaneapp/website"
+    docs_ref: str = "main"
+    github_token: str | None = field(default=None, repr=False)
 
     @property
     def access_enabled(self) -> bool:
@@ -86,7 +93,7 @@ class Settings:
 
     def secrets(self) -> list[str]:
         """Values that must never appear in logs or tool output."""
-        return [s for s in (self.arcane_api_key, self.auth_token) if s]
+        return [s for s in (self.arcane_api_key, self.auth_token, self.github_token) if s]
 
 
 def load_settings(env: dict[str, str] | None = None) -> Settings:
@@ -125,6 +132,13 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
     audit = env.get("AUDIT_LOG_PATH", "/data/audit.log").strip()
     cli_path = env.get("ARCANE_CLI_PATH", "").strip() or shutil.which("arcane-cli") or "arcane-cli"
 
+    docs_repo = env.get("DOCS_REPO", "getarcaneapp/website").strip() or "getarcaneapp/website"
+    docs_ref = env.get("DOCS_REF", "main").strip() or "main"
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", docs_repo):
+        raise ConfigError("DOCS_REPO must look like owner/name")
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", docs_ref) or ".." in docs_ref:
+        raise ConfigError("DOCS_REF must be a branch, tag or commit name")
+
     return Settings(
         arcane_url=url,
         arcane_api_key=key,
@@ -149,6 +163,11 @@ def load_settings(env: dict[str, str] | None = None) -> Settings:
         self_env=env.get("SELF_ENV", "").strip() or None,
         logs_enabled=_bool(env.get("LOGS_ENABLED"), default=True),
         logs_exclude=tuple(c.strip().lower() for c in env.get("LOGS_EXCLUDE", "").split(",") if c.strip()),
+        docs_enabled=_bool(env.get("DOCS_ENABLED"), default=True),
+        docs_cache_ttl_s=_int("DOCS_CACHE_TTL_S", env.get("DOCS_CACHE_TTL_S"), 3600),
+        docs_repo=docs_repo,
+        docs_ref=docs_ref,
+        github_token=env.get("GITHUB_TOKEN", "").strip() or None,
     )
 
 

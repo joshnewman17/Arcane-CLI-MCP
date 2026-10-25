@@ -55,8 +55,8 @@ async def test_lists_tools_with_examples(e2e):
     _, server = e2e
     async with Client(server) as c:
         tools = {t.name: t for t in (await c.list_tools()).tools}
-    assert set(tools) == {"arcane_run", "arcane_help", "arcane_api_get", "arcane_environments",
-                          "arcane_project_compose", "arcane_logs", "arcane_playbook"}
+    assert set(tools) == {"arcane_run", "arcane_cli_help", "arcane_api_get", "arcane_environments",
+                          "arcane_project_compose", "arcane_logs", "arcane_playbook", "arcane_docs"}
     assert set(tools["arcane_project_compose"].input_schema["properties"]) == {"project", "compose", "env_id", "confirm"}
     for t in tools.values():
         assert "Example" in t.description or t.name == "arcane_playbook"
@@ -125,7 +125,7 @@ async def test_redeploy_returns_frames(e2e):
 
 async def test_help(e2e):
     _, server = e2e
-    r = await call(server, "arcane_help", {"command": ["projects", "destroy"]})
+    r = await call(server, "arcane_cli_help", {"command": ["projects", "destroy"]})
     assert r["ok"] and "USAGE" in r["help"] and "\x1b" not in r["help"]
 
 

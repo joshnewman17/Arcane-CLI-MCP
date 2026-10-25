@@ -5,7 +5,7 @@ description: One read-only pass over a homelab managed by Arcane - environment s
 
 # Homelab health check with Arcane
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help` (arcane-cli-mcp server).
+Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help` (arcane-cli-mcp server).
 
 ## Ground rules
 - **Read-only.** Make no changes. If something needs fixing, report it and name the skill that handles it

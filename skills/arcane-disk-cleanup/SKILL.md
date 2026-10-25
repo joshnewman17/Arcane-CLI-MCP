@@ -5,7 +5,7 @@ description: Free disk space on Docker hosts managed by Arcane by measuring volu
 
 # Disk cleanup with Arcane
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help`.
+Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`.
 
 ## Ground rules
 - Resolve `env_id` first with `arcane_environments` when more than one environment exists.

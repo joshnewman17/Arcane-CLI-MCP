@@ -5,7 +5,7 @@ description: Diagnose a misbehaving Docker Compose stack (Arcane "project") - wo
 
 # Project (stack) triage with Arcane
 
-Tools: `arcane_environments`, `arcane_run`, `arcane_help`, `arcane_api_get` (read-only fallback).
+Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`, `arcane_api_get` (read-only fallback).
 
 ## Ground rules
 - Resolve `env_id` first with `arcane_environments` when more than one environment exists.
