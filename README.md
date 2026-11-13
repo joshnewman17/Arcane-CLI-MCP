@@ -5,6 +5,10 @@ A small, self-hosted **remote MCP server** that lets Claude manage a Docker home
 image) instead of calling the REST API endpoint by endpoint. It exposes a few generic tools, and the
 safe operational workflows ship with it as [playbooks](#skills).
 
+> **Not affiliated with Arcane.** This is an independent community project. It is not made, endorsed
+> or supported by the Arcane project or its maintainers. "Arcane" and `arcane-cli` refer to their
+> software, which this server only calls.
+
 ```
 Claude (claude.ai connector / Claude Code)
    │  MCP over Streamable HTTP (or stdio)
