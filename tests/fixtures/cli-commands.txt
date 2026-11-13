@@ -1,4 +1,4 @@
-# arcane-cli v2.17.2 command paths (one per line). Regenerate when bumping ARCANE_CLI_VERSION:
+# arcane-cli v2.17.3 command paths (one per line). Regenerate when bumping ARCANE_CLI_VERSION:
 # see README > Upgrading the pinned CLI.
 activities
 activities cancel
