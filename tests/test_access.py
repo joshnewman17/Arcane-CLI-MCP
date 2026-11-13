@@ -17,9 +17,9 @@ from arcane_mcp.server import USER_HEADER, build_server, http_app
 
 from .conftest import FAKE_CLI, make_settings
 
-TEAM = "newmanshouse"
-ISSUER = "https://newmanshouse.cloudflareaccess.com"
-AUD = "c6c3528d039fad07dd8acfa4f2a542adafa0f053f1222d55073497ee6a980c04"
+TEAM = "myteam"
+ISSUER = "https://myteam.cloudflareaccess.com"
+AUD = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"  # placeholder, not a real AUD tag
 
 
 def keypair(kid):
@@ -36,7 +36,7 @@ OTHER_KEY, OTHER_JWK = keypair("k2")
 def token(key=KEY, kid="k1", **overrides):
     now = int(time.time())
     claims = {"aud": [AUD], "iss": ISSUER, "iat": now, "exp": now + 300, "sub": "u-1",
-              "email": "josh@newmanshouse.com", **overrides}
+              "email": "user@example.com", **overrides}
     claims = {k: v for k, v in claims.items() if v is not None}
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": kid})
 
@@ -65,15 +65,15 @@ def verifier(jwks):
     return AccessVerifier(TEAM, AUD, fetch_jwks=jwks)
 
 
-@pytest.mark.parametrize("domain", ["newmanshouse", "newmanshouse.cloudflareaccess.com",
-                                    "https://newmanshouse.cloudflareaccess.com/"])
+@pytest.mark.parametrize("domain", ["myteam", "myteam.cloudflareaccess.com",
+                                    "https://myteam.cloudflareaccess.com/"])
 def test_team_issuer(domain):
     assert team_issuer(domain) == ISSUER
 
 
 def test_valid_token(verifier):
     ident = verifier.verify(token())
-    assert ident.email == "josh@newmanshouse.com" and ident.subject == "u-1"
+    assert ident.email == "user@example.com" and ident.subject == "u-1"
 
 
 def test_string_audience_also_accepted(verifier):
@@ -222,5 +222,5 @@ async def test_access_mode_tool_call_is_attributed_and_spoofing_stripped(access_
         assert r.status_code == 200
     entries = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
     run = [e for e in entries if e.get("tool") == "arcane_run"]
-    assert run and run[-1]["user"] == "josh@newmanshouse.com"
+    assert run and run[-1]["user"] == "user@example.com"
     assert "attacker@example.com" not in stream.getvalue()

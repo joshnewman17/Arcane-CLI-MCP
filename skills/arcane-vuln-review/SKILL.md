@@ -40,4 +40,4 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`.
 
 ## Finish
 - Summarise: images reviewed, CVEs by action, and what was ignored (with reasons).
-- Suggest recording accepted risks and ignore decisions in the user's Obsidian homelab docs so they can be revisited.
+- Suggest recording accepted risks and ignore decisions in the user's homelab notes or documentation so they can be revisited.

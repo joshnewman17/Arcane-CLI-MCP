@@ -27,7 +27,7 @@ class FakeCli:
         self.calls.append(args)
         out: dict = {"success": True, "data": {"ok": True}}
         if args[:2] == ["environments", "list"]:
-            out = {"data": [{"id": "0", "name": "Node804"}, {"id": "3", "name": "AWS ARM Micro"}]}
+            out = {"data": [{"id": "0", "name": "homelab"}, {"id": "3", "name": "AWS ARM Micro"}]}
         elif args[:2] == ["projects", "get"]:
             out = {"data": {"id": args[2], "name": "arcane-cli-mcp" if args[2] == SELF_PROJECT_ID else "other"}}
         elif args[:2] == ["containers", "get"]:
@@ -117,7 +117,7 @@ def test_other_environment_unaffected(setup):
     assert runner.run(["projects", "down", "arcane-cli-mcp"], env_id="3", confirm=True).get("self_target") is None
     assert runner.run(["projects", "down", "arcane-cli-mcp"], env_id="AWS ARM Micro",
                       confirm=True).get("self_target") is None
-    assert runner.run(["projects", "down", "arcane-cli-mcp"], env_id="Node804", confirm=True)["self_target"]
+    assert runner.run(["projects", "down", "arcane-cli-mcp"], env_id="homelab", confirm=True)["self_target"]
 
 
 def test_self_env_and_names_configurable(setup):

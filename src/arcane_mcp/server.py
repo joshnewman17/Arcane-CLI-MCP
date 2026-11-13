@@ -75,7 +75,7 @@ Run an arcane-cli command against the Arcane instance and return its JSON output
 
 `args` is the command and its arguments WITHOUT the binary name. The server adds `--json`, `--env <env_id>`
 (for environment-scoped commands) and, only when confirm=true, `--yes`. Any `--yes`/`-y`/`--force`/`--json`/
-`--output` you pass is stripped. Use `env_id` (an id or an environment name such as "Node804") instead of
+`--output` you pass is stripped. Use `env_id` (an id or an environment name such as "homelab") instead of
 `--env`. Flags that read local files (`--file`, `--env-file`, ...) are rejected: to create a project use
 arcane_project_create, to change its compose file arcane_project_compose. `--help` is answered as by
 arcane_cli_help.
@@ -113,7 +113,7 @@ canUpgrade, which only means the upgrade mechanism works.
 
 Examples:
 - {"args": ["containers", "list", "--all"], "filter_has_update": true}
-- {"args": ["containers", "updates"], "env_id": "Node804"}
+- {"args": ["containers", "updates"], "env_id": "homelab"}
 - {"args": ["projects", "redeploy", "immich"], "env_id": "0"}
 - {"args": ["projects", "destroy", "old-stack", "--remove-files=false"], "confirm": true}
   (only after the user explicitly approved this exact command)
@@ -192,7 +192,7 @@ Create a NEW compose project from a compose file, with a generated .env of place
 - Existing projects are refused: use arcane_project_compose to change them.
 
 Examples:
-- {"project": "paperless", "env_id": "Node804", "compose": "services:\\n  app:\\n    image: ...\\n    environment:\\n      SECRET: ${PAPERLESS_SECRET}\\n",
+- {"project": "paperless", "env_id": "homelab", "compose": "services:\\n  app:\\n    image: ...\\n    environment:\\n      SECRET: ${PAPERLESS_SECRET}\\n",
    "env_hints": {"PAPERLESS_SECRET": "Long random string (openssl rand -hex 32)"}}   (returns a preview to approve)
 - the same arguments plus "confirm": true   (after the user approved)
 """
@@ -223,7 +223,7 @@ passed the filters, so matched > returned means older matches were cut.
 Examples:
 - {"container": "Immich_server", "tail": 200}
 - {"container": "SearXNG", "since": "1h", "grep": "error|warn"}
-- {"project": "immich", "since": "30m", "env_id": "Node804"}
+- {"project": "immich", "since": "30m", "env_id": "homelab"}
 """
 
 DOCS_DESCRIPTION = """\

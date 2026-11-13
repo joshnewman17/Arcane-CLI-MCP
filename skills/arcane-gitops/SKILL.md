@@ -28,4 +28,4 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`.
 
 ## Finish
 - Summarise which commit was deployed and the outcome.
-- Suggest noting significant deployments or failures in the user's Obsidian homelab docs.
+- Suggest noting significant deployments or failures in the user's homelab notes or documentation.

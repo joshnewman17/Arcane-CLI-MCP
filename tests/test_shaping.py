@@ -1,4 +1,4 @@
-"""P1-P3 output shaping: compactors from real Node804 payloads, filters, activities, env names, errors."""
+"""P1-P3 output shaping: compactors from real Arcane payloads, filters, activities, env names, errors."""
 
 import io
 import json
@@ -27,7 +27,7 @@ class ScriptedCli:
     def __init__(self, responses=None, envs=None):
         self.calls = []
         self.responses = responses or {}
-        self.envs = envs if envs is not None else [{"id": "0", "name": "Node804"},
+        self.envs = envs if envs is not None else [{"id": "0", "name": "homelab"},
                                                    {"id": "e5c1", "name": "AWS ARM Micro"}]
 
     def __call__(self, argv, **kw):
@@ -57,7 +57,7 @@ def cli(monkeypatch):
 # -- volumes sizes ------------------------------------------------------------------------------
 
 def test_volume_sizes_snapshot():
-    out, changed = c.compact(("volumes", "sizes"), fixture("node804-volumes-sizes.json"))
+    out, changed = c.compact(("volumes", "sizes"), fixture("sample-volumes-sizes.json"))
     assert changed
     assert out["summary"] == {
         "total": 53, "total_size": "4.7 GB", "named_count": 7, "anonymous_count": 46,
@@ -81,7 +81,7 @@ def test_human_size(n, text):
 # -- jobs list ----------------------------------------------------------------------------------
 
 def test_jobs_snapshot():
-    out, changed = c.compact(("jobs", "list"), c.cleanup(fixture("node804-jobs-list.json")))
+    out, changed = c.compact(("jobs", "list"), c.cleanup(fixture("sample-jobs-list.json")))
     assert changed and out["observedAt"] == "2026-10-22T14:21:41Z" and "offline" not in out
     by_id = {j["id"]: j for j in out["jobs"]}
     assert by_id["analytics-heartbeat"] == {
@@ -103,7 +103,7 @@ def test_jobs_snapshot():
     blob = json.dumps(out)
     for noise in ("attempts", "owner", "remoteAccepted", "settingsUrl", "steps"):
         assert noise not in blob
-    assert len(blob) < len(json.dumps(fixture("node804-jobs-list.json"))) / 3
+    assert len(blob) < len(json.dumps(fixture("sample-jobs-list.json"))) / 3
 
 
 # -- containers get / labels / untagged images ----------------------------------------------------
@@ -131,7 +131,7 @@ def test_untagged_image_resolved_or_flagged():
 # -- global cleanup -----------------------------------------------------------------------------
 
 def test_cleanup():
-    data = {"$schema": "https://10.1.21.104:3552/api/schemas/X.json", "grandTotalItems": 0,
+    data = {"$schema": "https://192.0.2.10:3552/api/schemas/X.json", "grandTotalItems": 0,
             "pagination": {"grandTotalItems": 0, "totalItems": 3},
             "items": [{"$schema": "x", "at": "2026-10-22T09:00:00.581565308-05:00", "b": "2026-10-22T14:00:00Z"}],
             "keep": {"grandTotalItems": 87, "note": "2026-10-22 is a date, not a timestamp"}}
@@ -157,9 +157,9 @@ def test_timestamps_use_the_offset_not_local_tz(monkeypatch, tz):
 
 
 def test_cleanup_applies_to_every_run(runner, cli):
-    cli(responses={("gitops", "list"): (0, {"$schema": "https://10.1.21.104:3552/x", "data": []}, "")})
+    cli(responses={("gitops", "list"): (0, {"$schema": "https://192.0.2.10:3552/x", "data": []}, "")})
     r = runner.run(["gitops", "list"], compact=False)
-    assert "$schema" not in json.dumps(r) and "10.1.21.104" not in json.dumps(r)
+    assert "$schema" not in json.dumps(r) and "192.0.2.10" not in json.dumps(r)
 
 
 # -- filters ------------------------------------------------------------------------------------
@@ -336,7 +336,7 @@ def test_exclude_types_only_for_activities(runner, cli):
 ])
 def test_env_flag_only_when_scoped(runner, cli, args, scoped):
     fake = cli()
-    runner.run(args, env_id="Node804")
+    runner.run(args, env_id="homelab")
     assert ("--env" in fake.calls[-1]) is scoped
 
 
@@ -387,13 +387,13 @@ def test_unknown_env_lists_known(runner, cli):
     fake = cli()
     r = runner.run(["containers", "list"], env_id="7")
     assert r == {"ok": False, "error": "unknown env_id", "message": r["message"],
-                 "known": [{"id": "0", "name": "Node804"}, {"id": "e5c1", "name": "AWS ARM Micro"}]}
-    assert "Node804 (0)" in r["message"] and fake.command_calls() == []
+                 "known": [{"id": "0", "name": "homelab"}, {"id": "e5c1", "name": "AWS ARM Micro"}]}
+    assert "homelab (0)" in r["message"] and fake.command_calls() == []
 
 
 def test_env_list_is_cached(runner, cli, monkeypatch):
     fake = cli()
-    for env in ("0", "Node804", "e5c1"):
+    for env in ("0", "homelab", "e5c1"):
         runner.run(["containers", "list"], env_id=env)
     assert sum(1 for a in fake.calls if a[:2] == ["environments", "list"]) == 1
     clock = [cli_mod.time.monotonic() + cli_mod.ENV_CACHE_TTL_S + 1]
@@ -446,7 +446,7 @@ def api(settings, payload):
 
 
 def project_payload():
-    return {"$schema": "https://10.1.21.104:3552/api/schemas/P.json", "success": True, "data": {
+    return {"$schema": "https://192.0.2.10:3552/api/schemas/P.json", "success": True, "data": {
         "id": "p1", "name": "immich", "status": "running", "serviceCount": 2, "runningCount": 2,
         "updateInfo": {"hasUpdate": True, "imagesWithUpdates": 1},
         "serviceUpdates": [{"service": "server", "hasUpdate": True}],

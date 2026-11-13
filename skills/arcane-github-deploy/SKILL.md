@@ -93,4 +93,4 @@ Registry credentials shouldn't pass through you, so step 1 happens in the UI (te
 ## Finish
 - Report the project name, host:port, image digest, and how updates flow (push → CI → GHCR → `redeploy`).
 - Mention anything left: public exposure (reverse proxy / tunnel), and backups for named volumes.
-- Suggest recording the deployment (repo, project, port, tokens' purposes and expiry dates, but **not** the token values) in the user's Obsidian homelab docs.
+- Suggest recording the deployment (repo, project, port, tokens' purposes and expiry dates, but **not** the token values) in the user's homelab notes or documentation.

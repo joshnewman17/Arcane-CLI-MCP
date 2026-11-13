@@ -37,4 +37,4 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`, `arcane_api_get` 
 
 ## Finish
 - Summarise the root cause, the fix, and the current state.
-- Suggest writing the incident (symptom, cause, fix) into the user's Obsidian homelab docs.
+- Suggest writing the incident (symptom, cause, fix) into the user's homelab notes or documentation.

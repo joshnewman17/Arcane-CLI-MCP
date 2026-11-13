@@ -46,4 +46,4 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help`.
 
 ## Finish
 - Summarise what was removed and how much space was freed.
-- Suggest noting any removed volumes or projects in the user's Obsidian homelab docs.
+- Suggest noting any removed volumes or projects in the user's homelab notes or documentation.

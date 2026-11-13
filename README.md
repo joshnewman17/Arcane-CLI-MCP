@@ -10,7 +10,7 @@ Claude (claude.ai connector / Claude Code)
    │  MCP over Streamable HTTP (or stdio)
    ▼
 arcane-cli-mcp container ── Python MCP server ── policy table ── subprocess (argv list, no shell)
-   │                                                         └─ arcane-cli v2.17.0
+   │                                                         └─ arcane-cli (pinned)
    │  HTTP(S) + X-Api-Key
    ▼
 Arcane instance (LAN)
@@ -212,10 +212,11 @@ image, so nothing is built on the host.
 1. **Registry access:** under **Customization → Container Registries → ghcr.io**, the token must be a
    **classic** PAT with **`read:packages`**. GHCR doesn't accept fine-grained tokens, and a token with
    only `repo` passes Arcane's Test button but every private pull fails with `denied`.
-2. **Create the project** in the Arcane UI (**Projects → Create**), named `arcane-cli-mcp`. This is how
-   it runs on Node804: in the DMZ (`br0.14`, VLAN 14) with static IPs and **no published ports**, reached
-   only through its own `cloudflared` sidecar, with Cloudflare Access in front. It's the same pattern as the
-   other MCP servers.
+2. **Create the project** in the Arcane UI (**Projects → Create**), named `arcane-cli-mcp`. The example below
+   is a hardened pattern: the server sits on an isolated network (here a macvlan/VLAN network called `dmz`)
+   with static IPs and **no published ports**, reached only through its own `cloudflared` sidecar, with
+   Cloudflare Access in front. Replace the network name, addresses and DNS server with your own, or drop the
+   `networks`/`dns` keys and publish a port instead if you use a reverse proxy.
 
    ```yaml
    services:
@@ -223,14 +224,14 @@ image, so nothing is built on the host.
        image: ghcr.io/joshnewman17/arcane-cli-mcp:latest
        container_name: arcane-cli-mcp
        restart: unless-stopped
-       dns: [192.168.14.1]
+       dns: [192.168.50.1]
        environment:
          ARCANE_URL: ${ARCANE_URL:?set ARCANE_URL in .env}
          ARCANE_API_KEY: ${ARCANE_API_KEY:?set ARCANE_API_KEY in .env}
          CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:?set CF_ACCESS_TEAM_DOMAIN in .env}
          CF_ACCESS_AUD: ${CF_ACCESS_AUD:?set CF_ACCESS_AUD in .env}
          AUDIT_LOG_PATH: /data/audit.log
-         TZ: ${TZ:-America/Chicago}
+         TZ: ${TZ:-UTC}
        volumes:
          - data:/data
        tmpfs:
@@ -241,8 +242,8 @@ image, so nothing is built on the host.
        cap_drop:
          - ALL
        networks:
-         br0.14:
-           ipv4_address: 192.168.14.18
+         dmz:
+           ipv4_address: 192.168.50.10
 
      cloudflared:
        image: cloudflare/cloudflared:latest
@@ -251,15 +252,15 @@ image, so nothing is built on the host.
        command: tunnel run
        environment:
          TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
-         TZ: ${TZ:-America/Chicago}
-       dns: [192.168.14.1]
+         TZ: ${TZ:-UTC}
+       dns: [192.168.50.1]
        depends_on: [arcane-cli-mcp]
        networks:
-         br0.14:
-           ipv4_address: 192.168.14.19
+         dmz:
+           ipv4_address: 192.168.50.11
 
    networks:
-     br0.14:
+     dmz:
        external: true
 
    volumes:
@@ -269,19 +270,18 @@ image, so nothing is built on the host.
    Its **.env** in Arcane (values are substituted into the compose file; a missing one fails the deploy with a clear message):
 
    ```
-   # Arcane itself on VLAN 21 (OPNsense rule: DMZ 192.168.14.18 -> 10.1.21.104:3552)
-   ARCANE_URL=http://10.1.21.104:3552
+   ARCANE_URL=http://<arcane-host>:3552
    ARCANE_API_KEY=<scoped Arcane API key>
    CF_ACCESS_TEAM_DOMAIN=<team>.cloudflareaccess.com
    CF_ACCESS_AUD=<Access application AUD tag>
    TUNNEL_TOKEN=<tunnel connector token>
-   TZ=America/Chicago
+   TZ=<your time zone, e.g. Europe/London>
    ```
 
    Each value goes only to the container that needs it, so the tunnel token never reaches the MCP server.
    (`projects create -f` is blocked through arcane-cli-mcp because it reads a local file, so this step happens in the UI.)
-3. **OPNsense:** a pass rule on the DMZ interface: `192.168.14.18/32` → `10.1.21.104/32` TCP `3552`, placed
-   above any DMZ → private-network block rule.
+3. **Firewall:** if the MCP server sits on an isolated network, allow only its IP to reach Arcane's host on TCP
+   `3552`, placed above any rule that blocks that network from your private networks.
 4. Start it, through arcane-cli-mcp or the UI: `projects up arcane-cli-mcp`. The container's healthcheck runs
    `arcane-cli doctor` against Arcane.
 5. **Updates:** after CI publishes a new image, run `projects redeploy arcane-cli-mcp`, which pulls `:latest`
@@ -350,7 +350,7 @@ The same files reach Claude three ways, so the server connection alone is enough
   MCP prompts. The image bundles `skills/`, so there is nothing to install.
 - **Claude plugin (Claude Code / desktop Code tab):** installs all seven as native skills at once.
   ```
-  /plugin marketplace add joshnewman17/arcane-mcp
+  /plugin marketplace add joshnewman17/arcane-cli-mcp
   /plugin install arcane@arcane-mcp
   ```
   The plugin ships skills only. Add the server itself with your own URL and credentials (see
@@ -359,7 +359,7 @@ The same files reach Claude three ways, so the server connection alone is enough
   them to `~/.claude/skills/`.
 
 All of them resolve `env_id` first, treat `needs_confirmation` as "stop and ask", and suggest
-recording significant changes in your Obsidian homelab docs.
+recording significant changes in your homelab notes.
 
 ## Audit log
 
@@ -440,3 +440,11 @@ downloads a bare binary name.
   create/update are blocked. Use the Arcane UI for those.
 - Swarm workflows, webhook creation, and REST writes are out of scope.
 - Re-check `/healthz` and a `containers list` after any CLI bump. The JSON shapes can change.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability privately and how to deploy the server safely.
+
+## License
+
+[MIT](LICENSE)

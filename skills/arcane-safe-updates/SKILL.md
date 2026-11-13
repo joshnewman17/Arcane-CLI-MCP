@@ -44,4 +44,4 @@ Tools: `arcane_environments`, `arcane_run`, `arcane_cli_help` (arcane-cli-mcp se
 
 ## Finish
 - Summarise what was updated, what was skipped, and anything that failed.
-- Suggest recording significant changes (major version bumps, failures, rollbacks) in the user's Obsidian homelab docs.
+- Suggest recording significant changes (major version bumps, failures, rollbacks) in the user's homelab notes or documentation.

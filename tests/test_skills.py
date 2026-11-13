@@ -68,11 +68,11 @@ def test_readme_project_compose_parses():
     service, tunnel = compose["services"]["arcane-cli-mcp"], compose["services"]["cloudflared"]
     assert service["image"] == "ghcr.io/joshnewman17/arcane-cli-mcp:latest"
     assert service["read_only"] is True and "build" not in service
-    # DMZ pattern: static IPs on br0.14, nothing published, Access mode on.
+    # Isolated-network pattern: static IPs on an external network, nothing published, Access mode on.
     assert "ports" not in service and "ports" not in tunnel
-    assert service["networks"]["br0.14"]["ipv4_address"] == "192.168.14.18"
-    assert tunnel["networks"]["br0.14"]["ipv4_address"] == "192.168.14.19"
-    assert compose["networks"]["br0.14"]["external"] is True
+    assert service["networks"]["dmz"]["ipv4_address"] == "192.168.50.10"
+    assert tunnel["networks"]["dmz"]["ipv4_address"] == "192.168.50.11"
+    assert compose["networks"]["dmz"]["external"] is True
     assert {"CF_ACCESS_TEAM_DOMAIN", "CF_ACCESS_AUD", "ARCANE_API_KEY"} <= set(service["environment"])
     # Secrets go only where they're needed: no env_file, tunnel token only on cloudflared.
     assert "env_file" not in service and "TUNNEL_TOKEN" not in service["environment"]
